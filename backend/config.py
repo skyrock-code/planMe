@@ -1,7 +1,9 @@
 import os
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
 class Config:
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'mealplanner.db')
+    # Database
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///planMe.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # JWT — change this to a long random string in production
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'planme-super-secret-key-change-in-prod')
