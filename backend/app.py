@@ -17,7 +17,7 @@ def create_app():
 
     # Initialize extensions
     db.init_app(app)
-    migrate.init_app(app, db)   # 👈attach migrate here
+    migrate.init_app(app, db)   # attach migrate here
     jwt = JWTManager(app)
 
     # Import ALL models so migrations can detect them
