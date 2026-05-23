@@ -1,3 +1,206 @@
-export default function Login() {
-  return <div className="p-8 text-2xl font-bold">Login Page</div>
+/**
+ * @file NewPlan.jsx
+ * @description Create New Plan screen for the PlanMe app.
+ *              Allows users to set plan duration, budget, servings,
+ *              and describe their meal preferences via a text prompt.
+ *              On submission, navigates to the WeekPlan screen.
+ *              Matches the newplan.html design exactly.
+ * @module pages
+ */
+
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import TopAppBar from "../components/layout/TopAppBar";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import Chip from "../components/ui/Chip";
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+
+/**
+ * Suggested hashtag chips shown below the meal preference textarea.
+ * Users can tap these to append suggestions to their prompt.
+ */
+const SUGGESTION_CHIPS = ["#Healthy", "#Traditional", "#FastPrep", "#Budget", "#Spicy"];
+
+/**
+ * Plan duration options for the segmented toggle.
+ */
+const DURATIONS = ["Daily", "Weekly"];
+
+// ─── COMPONENT ────────────────────────────────────────────────────────────────
+
+/**
+ * NewPlan page component.
+ *
+ * Collects:
+ * - Plan duration (Daily or Weekly)
+ * - Budget in FCFA
+ * - Number of servings
+ * - Free-text meal preference prompt
+ *
+ * On submission, navigates to /week-plan.
+ * In Phase 4, the form data will be sent to the Flask meal
+ * generation API which uses budget as the primary constraint.
+ *
+ * @component
+ * @returns {JSX.Element}
+ */
+export default function NewPlan() {
+  const navigate = useNavigate();
+
+  // ── Form state ──
+  const [duration, setDuration]   = useState("Weekly");
+  const [budget, setBudget]       = useState("");
+  const [servings, setServings]   = useState("1");
+  const [prompt, setPrompt]       = useState("");
+
+  /**
+   * Appends a hashtag suggestion to the prompt textarea.
+   * @param {string} tag - The hashtag string e.g. "#Healthy"
+   */
+  function handleChipPress(tag) {
+    // Add a space before the tag if the prompt isn't empty
+    setPrompt((prev) =>
+      prev.trim() === "" ? tag : `${prev.trim()} ${tag}`
+    );
+  }
+
+  /**
+   * Handles plan generation.
+   * Placeholder — will call Flask meal generation API in Phase 4.
+   */
+  function handleGenerate() {
+    // TODO: send { duration, budget, servings, prompt } to Flask API
+    // Budget is the PRIMARY constraint for meal selection
+    navigate("/week-plan");
+  }
+
+  return (
+    <div className="relative flex min-h-screen w-full max-w-[430px] mx-auto flex-col bg-white dark:bg-background-dark shadow-xl overflow-x-hidden">
+
+      {/* ── Sticky top bar ── */}
+      <TopAppBar
+        title="Create New Plan"
+        onBack={() => navigate(-1)}
+      />
+
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto px-4 pb-32">
+
+        {/* ── Plan Duration toggle ── */}
+        <div className="pt-6">
+          <p className="text-[#111812] dark:text-white text-base font-semibold px-1 pb-3">
+            Plan Duration
+          </p>
+
+          {/* Segmented control — Daily / Weekly */}
+          <div className="flex h-12 w-full items-center justify-center rounded-full bg-gray-100 dark:bg-white/5 p-1">
+            {DURATIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setDuration(option)}
+                className={[
+                  "flex-1 h-full rounded-full text-sm font-semibold transition-all",
+                  duration === option
+                    ? "bg-white dark:bg-white/20 shadow-sm text-[#111812] dark:text-white"
+                    : "text-[#618968]",
+                ].join(" ")}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Budget field ── */}
+        <div className="pt-8">
+          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-3">
+            Estimated Budget
+          </h3>
+          <Input
+            placeholder="e.g. 5000"
+            type="number"
+            shape="box"
+            suffix="FCFA"
+            helper="Enter your budget for the entire duration."
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            min="0"
+          />
+        </div>
+
+        {/* ── Servings field ── */}
+        <div className="pt-8">
+          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
+            Number of Servings
+          </h3>
+          <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-3">
+            How many people are you cooking for?
+          </p>
+          <Input
+            placeholder="e.g. 2"
+            type="number"
+            shape="box"
+            value={servings}
+            onChange={(e) => setServings(e.target.value)}
+            min="1"
+          />
+        </div>
+
+        {/* ── Meal Preference prompt ── */}
+        <div className="pt-8">
+          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-3">
+            Meal Preferences
+          </h3>
+
+          <Input
+            placeholder="I want something with Ndolé or Achu for lunch. Keep it healthy for dinner with some fresh fruit."
+            type="textarea"
+            helper="What do you feel like eating?"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={5}
+          />
+
+          {/* Hashtag suggestion chips */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {SUGGESTION_CHIPS.map((tag) => (
+              <Chip
+                key={tag}
+                label={tag}
+                variant="hashtag"
+                onToggle={() => handleChipPress(tag)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* ── Decorative banner ── */}
+        <div className="mt-12 mb-8">
+          <div className="w-full h-32 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
+            <p className="text-[#111812] dark:text-white text-sm font-medium italic text-center px-6">
+              "Powered by Cameroonian AI to match your local market prices."
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Fixed bottom CTA button ── */}
+      <div className="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto p-6 bg-gradient-to-t from-white dark:from-background-dark via-white/95 dark:via-background-dark/95 to-transparent">
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          icon="auto_awesome"
+          onClick={handleGenerate}
+        >
+          Generate My Plan
+        </Button>
+        {/* iOS home indicator spacing */}
+        <div className="h-4" />
+      </div>
+    </div>
+  );
 }

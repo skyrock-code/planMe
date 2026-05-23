@@ -28,23 +28,25 @@ def recalculate_total(grocery_list):
 # HELPER: SERIALIZE ITEMS
 # ─────────────────────────────────────────
 def serialize_items(grocery_list):
-
+    """
+    Serializes all items in a grocery list into a list of dicts.
+    Handles both standard database ingredients and custom user items.
+    Uses correct Ingredient model field names: name, market_unit, unit_price_xaf.
+    """
     return [
         {
-            "item_id": item.item_id,
-
+            "item_id":     item.item_id,
+            # Use ingredient.name for db ingredients, custom_name for user additions
             "name":
-                item.ingredient.ingredient_name
+                item.ingredient.name
                 if item.ingredient
                 else item.custom_name,
-
-            "unit": item.unit,
-            "unit_price": item.unit_price,
-            "quantity": item.quantity,
+            "unit":        item.unit,
+            "unit_price":  item.unit_price,
+            "quantity":    item.quantity,
             "total_price": item.total_price,
-            "is_custom": item.is_custom,
+            "is_custom":   item.is_custom,
         }
-
         for item in grocery_list.items
     ]
 
@@ -108,34 +110,30 @@ def generate_grocery_list(plan_id):
 
             ingredient = meal_ingredient.ingredient
 
-            # NORMALIZED FORMULA
-            total_quantity = (
-                meal_ingredient.quantity * day_scale
+            # Scale ingredient quantity by how many days this meal covers
+            total_quantity = meal_ingredient.quantity * day_scale
+
+            # Calculate total cost using correct price field: unit_price_xaf
+            total_price = round(
+                total_quantity * ingredient.unit_price_xaf,
+                2
             )
 
-            total_price = (
-                total_quantity *
-                ingredient.estimated_price
-            )
+            # Use correct primary key: id (not ingredient_id)
+            ingredient_id = ingredient.id
 
-            ingredient_id = ingredient.ingredient_id
-
-            # Aggregate duplicate ingredients
+            # Aggregate: add to existing entry or create new one
             if ingredient_id in grocery_map:
-
-                grocery_map[ingredient_id]["quantity"] += total_quantity
-
+                grocery_map[ingredient_id]["quantity"]    += total_quantity
                 grocery_map[ingredient_id]["total_price"] += total_price
-
             else:
-
                 grocery_map[ingredient_id] = {
                     "ingredient_id": ingredient_id,
-                    "name": ingredient.ingredient_name,
-                    "unit": ingredient.unit,
-                    "unit_price": ingredient.estimated_price,
-                    "quantity": total_quantity,
-                    "total_price": total_price,
+                    "name":          ingredient.name,           # correct field
+                    "unit":          ingredient.market_unit,    # correct field
+                    "unit_price":    ingredient.unit_price_xaf, # correct field
+                    "quantity":      total_quantity,
+                    "total_price":   total_price,
                 }
 
     # ─────────────────────────────────────
@@ -345,14 +343,10 @@ def add_custom_ingredient(list_id):
                 "name, unit_price and quantity are required"
         }), 400
 
-    quantity = data["quantity"]
-
-    unit_price = data["unit_price"]
-
-    total_price = round(
-        quantity * unit_price,
-        2
-    )
+    # Convert to float explicitly — JSON values may arrive as strings
+    quantity    = float(data["quantity"])
+    unit_price  = float(data["unit_price"])
+    total_price = round(quantity * unit_price, 2)
 
     # Add custom item
     item = GroceryListItem(
