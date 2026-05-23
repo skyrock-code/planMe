@@ -44,10 +44,13 @@ def create_plan():
         return jsonify({"error": "end_date must be after start_date"}), 400
 
     plan = MealPlan(
-        user_id      = data['user_id'],
-        start_date   = start_date,
-        end_date     = end_date,
-        total_budget = data['total_budget'],
+        user_id            = data['user_id'],
+        start_date         = start_date,
+        end_date           = end_date,
+        total_budget       = data['total_budget'],
+        # Optional: defaults to "every_2_days" if not provided
+        # Allowed values: once_daily, twice_daily, every_2_days, every_3_days, flexible
+        cooking_frequency  = data.get('cooking_frequency', 'every_2_days'),
     )
 
     db.session.add(plan)
@@ -69,11 +72,12 @@ def get_user_plans(user_id):
 
     result = [
         {
-            "plan_id":      p.plan_id,
-            "start_date":   str(p.start_date),
-            "end_date":     str(p.end_date),
-            "total_budget": p.total_budget,
-            "created_at":   str(p.created_at),
+            "plan_id":           p.plan_id,
+            "start_date":        str(p.start_date),
+            "end_date":          str(p.end_date),
+            "total_budget":      p.total_budget,
+            "cooking_frequency": p.cooking_frequency,
+            "created_at":        str(p.created_at),
         }
         for p in plans
     ]
@@ -168,7 +172,13 @@ def get_plan_meals(plan_id):
         for a in assignments
     ]
 
-    return jsonify(result), 200
+    # Return the plan details along with its meals so the frontend
+    # can access `cooking_frequency` alongside the assigned meals.
+    return jsonify({
+        "plan_id":           plan.plan_id,
+        "cooking_frequency": plan.cooking_frequency,
+        "meals":             result
+    }), 200
 
 
 # ─────────────────────────────────────────
@@ -185,3 +195,69 @@ def delete_plan(plan_id):
     db.session.commit()
 
     return jsonify({"message": "Meal plan deleted"}), 200
+
+
+# ─────────────────────────────────────────
+# SWAP A SINGLE MEAL IN A PLAN
+# PUT /api/meal_plan/swap
+# Replaces one meal in a plan with another
+# without affecting other meals in the plan
+# ─────────────────────────────────────────
+@meal_plan_bp.route('/swap', methods=['PUT'])
+def swap_meal():
+    """
+    Swaps a single meal in a plan with a new meal.
+    Only the specified meal_id on the specified start_date
+    is replaced — all other meals in the plan are untouched.
+
+    Request body:
+    {
+        "plan_id":     int,
+        "old_meal_id": int,
+        "new_meal_id": int,
+        "start_date":  str (YYYY-MM-DD)
+    }
+    """
+    data = request.get_json()
+
+    required = ['plan_id', 'old_meal_id', 'new_meal_id', 'start_date']
+    if not all(data.get(f) for f in required):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        start_date = datetime.strptime(
+            data['start_date'], "%Y-%m-%d"
+        ).date()
+    except ValueError:
+        return jsonify({
+            "error": "Invalid date format. Use YYYY-MM-DD"
+        }), 400
+
+    # Find the specific meal assignment to replace
+    assignment = MealPlanMeal.query.filter_by(
+        plan_id    = data['plan_id'],
+        meal_id    = data['old_meal_id'],
+        start_date = start_date
+    ).first()
+
+    if not assignment:
+        return jsonify({
+            "error": "Meal assignment not found"
+        }), 404
+
+    # Verify the replacement meal exists
+    new_meal = Meal.query.get(data['new_meal_id'])
+    if not new_meal:
+        return jsonify({"error": "Replacement meal not found"}), 404
+
+    # Swap: update meal_id, keep start_date and duration_days unchanged
+    assignment.meal_id = data['new_meal_id']
+    db.session.commit()
+
+    return jsonify({
+        "message":      "Meal swapped successfully",
+        "plan_id":      data['plan_id'],
+        "new_meal_id":  data['new_meal_id'],
+        "new_meal_name": new_meal.meal_name,
+        "start_date":   str(start_date),
+    }), 200

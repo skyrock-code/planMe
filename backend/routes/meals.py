@@ -105,3 +105,31 @@ def delete_meal(meal_id):
     db.session.commit()
 
     return jsonify({"message": "Meal deleted"}), 200
+
+
+# ─────────────────────────────────────────
+# GET ALL MEALS FROM DATABASE
+# GET /api/meals/all
+# Returns all meals available for selection
+# Used by frontend for meal swap/replace feature
+# ─────────────────────────────────────────
+@meals_bp.route('/all', methods=['GET'])
+def get_all_meals():
+    """
+    Returns all meals in the database.
+    Used by the WeekPlan screen to populate
+    the meal swap/replace selector.
+    """
+    meals = Meal.query.all()
+
+    result = [
+        {
+            "meal_id":      meal.meal_id,
+            "meal_name":    meal.meal_name,
+            "cuisine_type": meal.cuisine_type,
+            "servings":     meal.servings,
+        }
+        for meal in meals
+    ]
+
+    return jsonify(result), 200

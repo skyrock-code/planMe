@@ -430,6 +430,17 @@ class MealPlan(db.Model):
         nullable=False
     )
 
+    # NEW: how often the user cooks for this plan
+    # Stored as a short string. Placed on MealPlan because
+    # a user may have different cooking schedules per plan.
+    # Allowed values: once_daily, twice_daily, every_2_days,
+    # every_3_days, flexible. Default is "every_2_days".
+    cooking_frequency = db.Column(
+        db.String(50),
+        nullable=True,
+        default="every_2_days",
+    )
+
     created_at = db.Column(
         db.DateTime,
         default=datetime.utcnow
