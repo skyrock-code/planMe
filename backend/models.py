@@ -29,6 +29,34 @@ class User(db.Model):
 
     gender = db.Column(db.String(20))
 
+    # ── Profile / Personalization Fields ──────────────────
+    # These fields extend User beyond authentication to store
+    # planning preferences used by the meal planner.
+
+    household_size = db.Column(
+        db.Integer,
+        nullable=True,
+        default=2
+    )
+
+    preferred_budget = db.Column(
+        db.Float,
+        nullable=True,
+        default=50000.0
+    )
+
+    location = db.Column(
+        db.String(100),
+        nullable=True,
+        default="Yaoundé"
+    )
+
+    cooking_frequency = db.Column(
+        db.String(50),
+        nullable=True,
+        default="every_2_days"
+    )
+
     created_at = db.Column(
         db.DateTime,
         default=datetime.utcnow

@@ -47,11 +47,13 @@ export default function AppRoutes() {
       <Route path="/"           element={<Login />}       />
 
       {/* Main app screens */}
-      <Route path="/dashboard"  element={<Dashboard />}   />
-      <Route path="/new-plan"   element={<NewPlan />}     />
-      <Route path="/week-plan"  element={<WeekPlan />}    />
-      <Route path="/grocery"    element={<GroceryList />} />
-      <Route path="/profile"    element={<Profile />}     />
+      <Route path="/dashboard"     element={<Dashboard />}   />
+      <Route path="/new-plan"      element={<NewPlan />}     />
+      <Route path="/week-plan/:planId" element={<WeekPlan />}    />
+      <Route path="/week-plan"     element={<WeekPlan />}    />
+      <Route path="/grocery/:planId" element={<GroceryList />} />
+      <Route path="/grocery"       element={<GroceryList />} />
+      <Route path="/profile"       element={<Profile />}     />
 
       {/* 
         TODO Phase 4: Add a catch-all 404 route
