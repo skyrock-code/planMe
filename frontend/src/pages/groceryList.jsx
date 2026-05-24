@@ -1,282 +1,555 @@
 /**
  * @file GroceryList.jsx
  * @description Grocery List screen for the PlanMe app.
- *              Displays all ingredients needed for the current meal plan,
- *              grouped by category, with quantities, units, and estimated
- *              prices in FCFA. Users can check off items as they shop.
- *              Matches the list.html design and PlanMe design system.
+ *              Displays all ingredients needed for the meal plan.
+ *              Users can check items, edit quantities, delete items,
+ *              add custom ingredients, and export as plain text.
+ *              Connected to real Flask backend for all data.
  * @module pages
  */
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import groceryService from "../services/groceryService";
+import planService from "../services/planService";
+import { PageWrapper } from "../components/common";
 import TopAppBar from "../components/layout/TopAppBar";
 import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
 import BottomNavBar from "../components/layout/BottomNavBar";
-
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-// Hardcoded grocery data for UI — will come from Flask API in Phase 4.
-// Prices reflect real Cameroonian market values from the meal database.
-
-/**
- * Grocery list items grouped by category.
- * Each item has a unique id, name, quantity, unit, and estimated price in FCFA.
- */
-const GROCERY_GROUPS = [
-  {
-    category: "Proteins",
-    icon: "egg",
-    items: [
-      { id: 1,  name: "Chicken",        quantity: 1,   unit: "piece",  price: 3500 },
-      { id: 2,  name: "Smoked Fish",    quantity: 2,   unit: "piece",  price: 1000 },
-      { id: 3,  name: "Beef",           quantity: 500, unit: "g",      price: 2500 },
-    ],
-  },
-  {
-    category: "Vegetables",
-    icon: "nutrition",
-    items: [
-      { id: 4,  name: "Bitter Leaf",    quantity: 1,   unit: "bunch",  price: 300  },
-      { id: 5,  name: "Tomato",         quantity: 6,   unit: "piece",  price: 300  },
-      { id: 6,  name: "Onion",          quantity: 3,   unit: "piece",  price: 150  },
-      { id: 7,  name: "Leek",           quantity: 1,   unit: "bunch",  price: 200  },
-    ],
-  },
-  {
-    category: "Staples",
-    icon: "grass",
-    items: [
-      { id: 8,  name: "Plantain",       quantity: 1,   unit: "hand",   price: 500  },
-      { id: 9,  name: "Cocoyam",        quantity: 1,   unit: "kg",     price: 600  },
-      { id: 10, name: "Rice",           quantity: 2,   unit: "cup",    price: 400  },
-    ],
-  },
-  {
-    category: "Pantry",
-    icon: "kitchen",
-    items: [
-      { id: 11, name: "Palm Oil",       quantity: 0.5, unit: "L",      price: 500  },
-      { id: 12, name: "Crayfish",       quantity: 1,   unit: "pack",   price: 300  },
-      { id: 13, name: "Maggi Cubes",    quantity: 1,   unit: "pack",   price: 100  },
-      { id: 14, name: "Pepper",         quantity: 4,   unit: "piece",  price: 100  },
-    ],
-  },
-];
-
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-
-/**
- * Formats a number as a locale-friendly FCFA string.
- * @param {number} amount
- * @returns {string}
- */
-function formatFCFA(amount) {
-  return `${amount.toLocaleString("fr-CM")} FCFA`;
-}
-
-/**
- * Calculates the total price of all items in the grocery list.
- * @param {Array} groups - Array of category groups with items
- * @returns {number} Total price in FCFA
- */
-function calculateTotal(groups) {
-  return groups.reduce(
-    (total, group) =>
-      total + group.items.reduce((sum, item) => sum + item.price, 0),
-    0
-  );
-}
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 /**
  * GroceryList page component.
  *
- * Shows all ingredients needed for the current meal plan grouped by category.
- * Users can check off items as they shop at the market.
- * Displays a running total at the bottom.
- *
- * In Phase 4, this list will be generated from the active MealPlan
- * by the Flask backend, pulling from the Meal_Ingredients database.
+ * Displays all ingredients needed for the selected meal plan.
+ * Users can:
+ * - Check/uncheck items as they shop (local state)
+ * - Edit quantities (calls PATCH endpoint)
+ * - Delete items (calls DELETE endpoint)
+ * - Add custom ingredients (calls POST endpoint)
+ * - Export list as plain text file
  *
  * @component
  * @returns {JSX.Element}
  */
 export default function GroceryList() {
   const navigate = useNavigate();
+  const { planId: urlPlanId } = useParams();
+  const { user } = useAuth();
 
-  // Track which items have been checked off (by item id)
+  // ── State ──
+  const [groceryData, setGroceryData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [checkedItems, setCheckedItems] = useState(new Set());
 
-  /**
-   * Toggles the checked state of a grocery item.
-   * @param {number} itemId - The item's unique id
-   */
-  function handleToggleItem(itemId) {
+  // Edit quantity state
+  const [editingId, setEditingId] = useState(null);
+  const [editQty, setEditQty] = useState("");
+  const [savingQty, setSavingQty] = useState(false);
+
+  // Delete state
+  const [deletingId, setDeletingId] = useState(null);
+
+  // Add custom item state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customQty, setCustomQty] = useState("");
+  const [customUnit, setCustomUnit] = useState("piece");
+  const [customPrice, setCustomPrice] = useState("");
+  const [saveToPro, setSaveToPro] = useState(false);
+  const [addingItem, setAddingItem] = useState(false);
+
+  // ── Data Fetching ──
+  const fetchGroceryList = useCallback(async () => {
+    if (!user?.user_id) return;
+    try {
+      setLoading(true);
+      setError("");
+
+      let targetPlanId = urlPlanId;
+
+      // No planId in URL — get most recent plan
+      if (!targetPlanId) {
+        const plans = await planService.getUserPlans(user.user_id);
+        if (plans.length === 0) {
+          setError("no_plans");
+          return;
+        }
+        const recent = plans.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        )[0];
+        targetPlanId = recent.plan_id;
+      }
+
+      // Generate/fetch grocery list for this plan
+      const data = await groceryService.generateGroceryList(targetPlanId);
+      setGroceryData(data);
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          "Failed to load grocery list. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [urlPlanId, user?.user_id]);
+
+  useEffect(() => {
+    fetchGroceryList();
+  }, [fetchGroceryList]);
+
+  // ── Handlers ──
+  function handleToggleCheck(itemId) {
     setCheckedItems((prev) => {
       const updated = new Set(prev);
-      if (updated.has(itemId)) {
-        updated.delete(itemId);
-      } else {
-        updated.add(itemId);
-      }
+      updated.has(itemId) ? updated.delete(itemId) : updated.add(itemId);
       return updated;
     });
   }
 
-  // Calculate totals
-  const totalPrice     = calculateTotal(GROCERY_GROUPS);
-  const totalItems     = GROCERY_GROUPS.reduce((sum, g) => sum + g.items.length, 0);
-  const checkedCount   = checkedItems.size;
+  function startEditQty(item) {
+    setEditingId(item.item_id);
+    setEditQty(String(item.quantity));
+  }
+
+  async function saveEditQty(itemId) {
+    const qty = parseFloat(editQty);
+    if (isNaN(qty) || qty <= 0) return;
+    try {
+      setSavingQty(true);
+      await groceryService.updateItemQuantity(itemId, qty);
+      await fetchGroceryList();
+      setEditingId(null);
+    } catch (err) {
+      setError("Failed to update quantity.");
+    } finally {
+      setSavingQty(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditQty("");
+  }
+
+  async function handleDeleteItem(itemId) {
+    try {
+      setDeletingId(itemId);
+      await groceryService.removeItem(itemId);
+      await fetchGroceryList();
+    } catch (err) {
+      setError("Failed to remove item.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleAddCustom() {
+    if (!customName || !customQty || !customPrice) return;
+    if (!groceryData?.list_id) return;
+    try {
+      setAddingItem(true);
+      await groceryService.addCustomIngredient(groceryData.list_id, {
+        name: customName,
+        quantity: parseFloat(customQty),
+        unit_price: parseFloat(customPrice),
+        unit: customUnit,
+        save_to_profile: saveToPro,
+        user_id: user.user_id,
+      });
+      setCustomName("");
+      setCustomQty("");
+      setCustomPrice("");
+      setCustomUnit("piece");
+      setSaveToPro(false);
+      setShowAddForm(false);
+      await fetchGroceryList();
+    } catch (err) {
+      setError("Failed to add ingredient.");
+    } finally {
+      setAddingItem(false);
+    }
+  }
+
+  function handleExport() {
+    if (!groceryData) return;
+
+    const lines = [
+      "PLANME GROCERY LIST",
+      "===================",
+      `Budget: ${groceryData.budget?.toLocaleString("fr-CM")} FCFA`,
+      `Total:  ${groceryData.total_price?.toLocaleString("fr-CM")} FCFA`,
+      `Status: ${groceryData.within_budget ? "Within budget" : "Over budget"}`,
+      "",
+      "ITEMS:",
+      "------",
+      ...(groceryData.items || []).map(
+        (item) =>
+          `${item.name.padEnd(25)} ${item.quantity} ${item.unit.padEnd(8)} ${item.total_price?.toLocaleString("fr-CM")} FCFA`
+      ),
+      "",
+      `Generated by PlanMe — ${new Date().toLocaleDateString()}`,
+    ];
+
+    const content = lines.join("\n");
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `planme-grocery-${new Date().toISOString().split("T")[0]}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Render ──
+  if (error === "no_plans") {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark pb-24">
+        <TopAppBar title="Grocery List" onBack={() => navigate(-1)} />
+        <div className="flex flex-col items-center justify-center gap-4 p-8 mt-12">
+          <span className="material-symbols-outlined text-6xl text-[#618968]">
+            shopping_cart
+          </span>
+          <h2 className="text-xl font-bold text-[#111812] dark:text-white">
+            No Active Plan
+          </h2>
+          <p className="text-center text-[#618968] text-sm">
+            Create a meal plan first to generate a grocery list.
+          </p>
+          <Button
+            variant="primary"
+            size="lg"
+            icon="add_circle"
+            onClick={() => navigate("/new-plan")}
+          >
+            Create Plan
+          </Button>
+        </div>
+        <BottomNavBar />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark pb-32">
+    <PageWrapper
+      loading={loading}
+      error={error}
+      onRetry={fetchGroceryList}
+      loadingMsg="Loading grocery list..."
+    >
+      <div className="min-h-screen bg-background-light dark:bg-background-dark pb-24">
 
-      {/* ── Sticky top bar ── */}
-      <TopAppBar
-        title="Grocery List"
-        onBack={() => navigate(-1)}
-        rightIcon="share"
-        onRightAction={() => {}}
-      />
+        {/* ── Top bar ── */}
+        <TopAppBar
+          title="Grocery List"
+          subtitle={
+            groceryData
+              ? `${groceryData.items?.length || 0} items • ${groceryData.total_price?.toLocaleString("fr-CM") || "0"} FCFA`
+              : ""
+          }
+          onBack={() => navigate(-1)}
+        />
 
-      {/* ── Summary banner ── */}
-      <div className="px-4 pt-4">
-        <div className="bg-white dark:bg-[#1a2e1d] rounded-xl p-4 shadow-sm border border-gray-50 dark:border-gray-800">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-[#618968] mb-1">
-                Total Estimated Cost
-              </p>
-              <p className="text-2xl font-bold text-[#111812] dark:text-white">
-                {formatFCFA(totalPrice)}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-bold uppercase tracking-widest text-[#618968] mb-1">
-                Progress
-              </p>
-              <p className="text-lg font-bold text-primary">
-                {checkedCount}/{totalItems}
-              </p>
+        {/* ── Budget status card ── */}
+        {groceryData && (
+          <div className="px-4 py-3">
+            <div className={[
+              "rounded-xl p-4 border",
+              groceryData.within_budget
+                ? "bg-primary/10 border-primary/20"
+                : "bg-red-50/10 border-red-100/20"
+            ].join(" ")}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase text-[#618968] mb-1">
+                    Budget Status
+                  </p>
+                  <p className={[
+                    "font-bold text-lg",
+                    groceryData.within_budget
+                      ? "text-primary"
+                      : "text-red-500"
+                  ].join(" ")}>
+                    {groceryData.within_budget ? "Within Budget" : "Over Budget"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-[#618968] mb-1">Total / Budget</p>
+                  <p className="text-lg font-bold text-[#111812] dark:text-white">
+                    {groceryData.total_price?.toLocaleString("fr-CM")} / {groceryData.budget?.toLocaleString("fr-CM")} FCFA
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width: `${Math.min(100, (groceryData.total_price / groceryData.budget) * 100)}%`,
+                  }}
+                />
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Shopping progress bar */}
-          <div className="mt-3 w-full bg-gray-100 dark:bg-[#253d28] h-2 rounded-full overflow-hidden">
-            <div
-              className="bg-primary h-full rounded-full transition-all duration-300"
-              style={{
-                width: totalItems > 0
-                  ? `${Math.round((checkedCount / totalItems) * 100)}%`
-                  : "0%",
-              }}
-            />
-          </div>
-        </div>
-      </div>
+        {/* ── Add custom item form ── */}
+        {showAddForm && (
+          <div className="mx-4 mt-4 mb-4 bg-white dark:bg-[#1a2e1d] rounded-xl p-4 border border-primary/20 shadow-sm">
+            <h4 className="font-bold text-[#111812] dark:text-white mb-3">
+              Add Custom Ingredient
+            </h4>
 
-      {/* ── Grocery groups ── */}
-      <main className="px-4 pt-4 flex flex-col gap-4">
-        {GROCERY_GROUPS.map((group) => (
-          <div key={group.category}>
+            <div className="flex flex-col gap-3">
+              <Input
+                placeholder="Ingredient name"
+                type="text"
+                shape="box"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+              />
 
-            {/* Category header */}
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <span className="material-symbols-outlined text-primary text-base">
-                {group.icon}
-              </span>
-              <h3 className="text-sm font-bold uppercase tracking-widest text-[#618968]">
-                {group.category}
-              </h3>
-            </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Qty"
+                  type="number"
+                  shape="box"
+                  value={customQty}
+                  onChange={(e) => setCustomQty(e.target.value)}
+                  min="0"
+                />
+                <select
+                  value={customUnit}
+                  onChange={(e) => setCustomUnit(e.target.value)}
+                  className="flex-1 h-14 rounded-xl border border-[#dbe6dd] dark:border-white/10 bg-white dark:bg-white/5 text-[#111812] dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {["piece", "bunch", "pack", "cup", "tbsp", "tsp", "kg", "g", "L", "ml", "hand", "root", "clove", "bulb", "stalk", "tin"].map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Items list */}
-            <div className="bg-white dark:bg-[#1a2e1d] rounded-xl overflow-hidden shadow-sm border border-gray-50 dark:border-gray-800">
-              {group.items.map((item, index) => {
-                const isChecked = checkedItems.has(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleToggleItem(item.id)}
-                    aria-label={`${isChecked ? "Uncheck" : "Check"} ${item.name}`}
+              <Input
+                placeholder="Price per unit (FCFA)"
+                type="number"
+                shape="box"
+                suffix="FCFA"
+                value={customPrice}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                min="0"
+              />
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  onClick={() => setSaveToPro((prev) => !prev)}
+                  className={[
+                    "w-12 h-6 rounded-full relative transition-colors cursor-pointer",
+                    saveToPro ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"
+                  ].join(" ")}
+                >
+                  <div
                     className={[
-                      "w-full flex items-center justify-between p-4 text-left transition-colors",
-                      index < group.items.length - 1
-                        ? "border-b border-gray-50 dark:border-gray-800"
-                        : "",
-                      isChecked ? "bg-primary/5" : "hover:bg-gray-50 dark:hover:bg-white/5",
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform",
+                      saveToPro ? "right-1" : "left-1"
+                    ].join(" ")}
+                  />
+                </div>
+                <span className="text-sm text-[#618968]">
+                  Save for future use
+                </span>
+              </label>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  fullWidth
+                  loading={addingItem}
+                  onClick={handleAddCustom}
+                >
+                  Add
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddForm(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Grocery items list ── */}
+        <div className="px-4 py-2">
+          {(groceryData?.items || []).length > 0 ? (
+            (groceryData.items || []).map((item) => {
+              const isChecked = checkedItems.has(item.item_id);
+              const isEditing = editingId === item.item_id;
+              const isDeleting = deletingId === item.item_id;
+
+              return (
+                <div
+                  key={item.item_id}
+                  className={[
+                    "flex items-center justify-between p-4 border-b",
+                    "border-gray-50 dark:border-gray-800 last:border-0",
+                    isChecked ? "bg-primary/5 opacity-60" : "bg-white dark:bg-[#1a2e1d]",
+                  ].join(" ")}
+                >
+                  {/* Checkbox */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCheck(item.item_id)}
+                    className={[
+                      "w-6 h-6 rounded-full border-2 flex items-center",
+                      "justify-center shrink-0 transition-colors mr-3",
+                      isChecked
+                        ? "bg-primary border-primary"
+                        : "border-gray-300 dark:border-gray-600",
                     ].join(" ")}
                   >
-                    {/* Checkbox + item name */}
-                    <div className="flex items-center gap-3">
-                      {/* Custom checkbox */}
-                      <div
-                        className={[
-                          "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                          isChecked
-                            ? "bg-primary border-primary"
-                            : "border-gray-300 dark:border-gray-600",
-                        ].join(" ")}
-                      >
-                        {isChecked && (
-                          <span className="material-symbols-outlined text-white text-sm">
-                            check
-                          </span>
-                        )}
-                      </div>
+                    {isChecked && (
+                      <span className="material-symbols-outlined text-white text-sm">
+                        check
+                      </span>
+                    )}
+                  </button>
 
-                      {/* Item name + quantity */}
-                      <div>
-                        <p
-                          className={[
-                            "font-semibold text-sm",
-                            isChecked
-                              ? "line-through text-gray-400"
-                              : "text-[#111812] dark:text-white",
-                          ].join(" ")}
-                        >
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-[#618968]">
-                          {item.quantity} {item.unit}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Price */}
+                  {/* Item name + quantity editor */}
+                  <div className="flex-1 min-w-0">
                     <p
                       className={[
-                        "text-sm font-bold",
+                        "font-semibold text-sm truncate",
+                        isChecked
+                          ? "line-through text-gray-400"
+                          : "text-[#111812] dark:text-white",
+                      ].join(" ")}
+                    >
+                      {item.name}
+                      {item.is_custom && (
+                        <span className="ml-2 text-xs text-primary font-normal">
+                          (custom)
+                        </span>
+                      )}
+                    </p>
+
+                    {isEditing ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="number"
+                          value={editQty}
+                          onChange={(e) => setEditQty(e.target.value)}
+                          min="0"
+                          className="w-20 h-8 rounded-lg border border-primary px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          autoFocus
+                        />
+                        <span className="text-xs text-[#618968]">{item.unit}</span>
+                        <button
+                          type="button"
+                          onClick={() => saveEditQty(item.item_id)}
+                          disabled={savingQty}
+                          className="text-primary text-xs font-bold hover:underline disabled:opacity-50"
+                        >
+                          {savingQty ? "..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="text-gray-400 text-xs hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#618968] mt-0.5">
+                        {item.quantity} {item.unit}
+                        {" · "}
+                        <button
+                          type="button"
+                          onClick={() => startEditQty(item)}
+                          className="text-primary hover:underline"
+                        >
+                          Edit
+                        </button>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Price + delete */}
+                  <div className="flex items-center gap-2 ml-2">
+                    <p
+                      className={[
+                        "text-sm font-bold whitespace-nowrap",
                         isChecked ? "text-gray-400" : "text-[#111812] dark:text-white",
                       ].join(" ")}
                     >
-                      {formatFCFA(item.price)}
+                      {item.total_price?.toLocaleString("fr-CM")} F
                     </p>
-                  </button>
-                );
-              })}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteItem(item.item_id)}
+                      disabled={isDeleting}
+                      className="text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">
+                        {isDeleting ? "hourglass_empty" : "delete_outline"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-12">
+              <span className="material-symbols-outlined text-5xl text-[#618968]">
+                checklist
+              </span>
+              <p className="text-[#618968] text-sm">No items in list</p>
             </div>
+          )}
+        </div>
+
+        {/* ── Fixed bottom action bar ── */}
+        <div className="fixed bottom-16 left-0 right-0 max-w-[430px] mx-auto px-4 py-3 bg-white/95 dark:bg-background-dark/95 border-t border-[#618968]/10">
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="md"
+              icon="add"
+              onClick={() => setShowAddForm((prev) => !prev)}
+            >
+              Add Item
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              icon="download"
+              onClick={handleExport}
+            >
+              Export
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              icon="check_circle"
+              className="flex-1"
+              onClick={() => navigate(-1)}
+            >
+              Done
+            </Button>
           </div>
-        ))}
-      </main>
+        </div>
 
-      {/* ── Fixed bottom action bar ── */}
-      <div className="fixed bottom-16 left-0 right-0 max-w-[430px] mx-auto px-4 py-3 bg-white/95 dark:bg-background-dark/95 border-t border-[#618968]/10">
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          icon="check_circle"
-          onClick={() => navigate("/week-plan")}
-        >
-          Done Shopping
-        </Button>
+        {/* ── Bottom navigation ── */}
+        <BottomNavBar />
       </div>
-
-      {/* ── Fixed bottom navigation ── */}
-      <BottomNavBar />
-    </div>
+    </PageWrapper>
   );
 }

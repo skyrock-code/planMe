@@ -52,6 +52,27 @@ const authService = {
   isLoggedIn() {
     return Boolean(localStorage.getItem("access_token"));
   },
+
+  /**
+   * Fetches the full profile of the logged-in user.
+   * Requires a valid JWT token in localStorage.
+   * @returns {Promise<Object>} Full user profile including diets/allergies
+   */
+  async getProfile() {
+    const response = await api.get("/auth/profile");
+    return response.data;
+  },
+
+  /**
+   * Updates the profile of the logged-in user.
+   * Only fields included in the object will be updated.
+   * @param {Object} profileData - Partial profile fields to update
+   * @returns {Promise<{message: string}>}
+   */
+  async updateProfile(profileData) {
+    const response = await api.put("/auth/profile", profileData);
+    return response.data;
+  },
 };
 
 export default authService;

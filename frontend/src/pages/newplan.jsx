@@ -2,14 +2,15 @@
  * @file NewPlan.jsx
  * @description Create New Plan screen for the PlanMe app.
  *              Allows users to set plan duration, budget, servings,
- *              and describe their meal preferences via a text prompt.
- *              On submission, navigates to the WeekPlan screen.
- *              Matches the newplan.html design exactly.
+ *              cooking frequency, and describe their meal preferences via a text prompt.
+ *              On submission, creates a plan via Flask backend and navigates to WeekPlan.
  * @module pages
  */
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import planService from "../services/planService";
 import TopAppBar from "../components/layout/TopAppBar";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
@@ -48,12 +49,35 @@ const DURATIONS = ["Daily", "Weekly"];
  */
 export default function NewPlan() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // ── Form state ──
   const [duration, setDuration]   = useState("Weekly");
   const [budget, setBudget]       = useState("");
   const [servings, setServings]   = useState("1");
+  const [frequency, setFrequency] = useState("every_2_days");
   const [prompt, setPrompt]       = useState("");
+
+  // ── API state ──
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // ── Plan Date Calculation ──
+  function getPlanDates(duration) {
+    const today = new Date();
+    const start_date = today.toISOString().split("T")[0];
+
+    let end_date;
+    if (duration === "Daily") {
+      end_date = start_date;
+    } else {
+      const endDate = new Date(today);
+      endDate.setDate(endDate.getDate() + 6);
+      end_date = endDate.toISOString().split("T")[0];
+    }
+
+    return { start_date, end_date };
+  }
 
   /**
    * Appends a hashtag suggestion to the prompt textarea.
@@ -68,12 +92,46 @@ export default function NewPlan() {
 
   /**
    * Handles plan generation.
-   * Placeholder — will call Flask meal generation API in Phase 4.
+   * Calls Flask meal generation API with form data.
+   * On success, navigates to the generated plan.
    */
-  function handleGenerate() {
-    // TODO: send { duration, budget, servings, prompt } to Flask API
-    // Budget is the PRIMARY constraint for meal selection
-    navigate("/week-plan");
+  async function handleGenerate() {
+    if (!budget || !servings) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+
+    if (!user?.user_id) {
+      setError("User not authenticated.");
+      return;
+    }
+
+    try {
+      setError("");
+      setLoading(true);
+
+      const { start_date, end_date } = getPlanDates(duration);
+
+      const planData = {
+        user_id: user.user_id,
+        start_date,
+        end_date,
+        budget: parseFloat(budget),
+        servings: parseInt(servings, 10),
+        cooking_frequency: frequency,
+        prompt,
+      };
+
+      const response = await planService.createPlan(planData);
+      navigate(`/week-plan/${response.plan_id}`);
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          "Failed to create plan. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -149,6 +207,27 @@ export default function NewPlan() {
           />
         </div>
 
+        {/* ── Cooking Frequency dropdown ── */}
+        <div className="pt-8">
+          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-3">
+            Cooking Frequency
+          </h3>
+          <select
+            value={frequency}
+            onChange={(e) => setFrequency(e.target.value)}
+            className="w-full h-12 rounded-xl border border-[#dbe6dd] dark:border-white/10 bg-white dark:bg-white/5 text-[#111812] dark:text-white px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="once_daily">Once a day</option>
+            <option value="twice_daily">Twice a day</option>
+            <option value="every_2_days">Every 2 days</option>
+            <option value="every_3_days">Every 3 days</option>
+            <option value="flexible">Flexible</option>
+          </select>
+          <p className="text-xs text-gray-400 mt-2 px-1">
+            How often do you plan to cook?
+          </p>
+        </div>
+
         {/* ── Meal Preference prompt ── */}
         <div className="pt-8">
           <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-3">
@@ -189,11 +268,18 @@ export default function NewPlan() {
 
       {/* ── Fixed bottom CTA button ── */}
       <div className="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto p-6 bg-gradient-to-t from-white dark:from-background-dark via-white/95 dark:via-background-dark/95 to-transparent">
+        {error && (
+          <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-xl p-3">
+            <p className="text-red-600 dark:text-red-400 text-sm font-medium">{error}</p>
+          </div>
+        )}
+
         <Button
           variant="primary"
           size="lg"
           fullWidth
           icon="auto_awesome"
+          loading={loading}
           onClick={handleGenerate}
         >
           Generate My Plan

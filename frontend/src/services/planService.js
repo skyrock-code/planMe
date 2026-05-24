@@ -13,8 +13,10 @@ const planService = {
       user_id:           planData.user_id,
       start_date:        planData.start_date,
       end_date:          planData.end_date,
-      total_budget:      planData.total_budget,
+      total_budget:      planData.budget,
+      servings:          planData.servings,
       cooking_frequency: planData.cooking_frequency || "every_2_days",
+      prompt:            planData.prompt || "",
     });
     return response.data;
   },
