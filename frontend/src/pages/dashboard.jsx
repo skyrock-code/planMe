@@ -16,6 +16,7 @@ import BudgetBar from "../components/ui/BudgetBar";
 import MealCard from "../components/ui/MealCard";
 import MealThumbnail from "../components/ui/MealThumbnail";
 import BottomNavBar from "../components/layout/BottomNavBar";
+import { getMealImage } from "../utils/mealImages";
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
@@ -179,7 +180,7 @@ export default function Dashboard() {
                 layout="featured"
                 mealName={todaysMeal.meal_name}
                 mealType="Cooking Session"
-                imageUrl=""
+                imageUrl={getMealImage(todaysMeal?.meal_name)}
                 onViewRecipe={() => navigate("/week-plan")}
               />
             ) : (
@@ -291,7 +292,7 @@ export default function Dashboard() {
                   <MealThumbnail
                     key={meal.meal_id}
                     mealName={meal.meal_name}
-                    imageUrl=""
+                    imageUrl={getMealImage(meal.meal_name)}
                     onPress={() => navigate("/week-plan")}
                   />
                 ))}

@@ -61,8 +61,23 @@ export default function Profile() {
   const [servings, setServings] = useState(2);
   const [location, setLocation] = useState("");
   const [frequency, setFrequency] = useState("every_2_days");
-  const [preferences, setPreferences] = useState([]);
+
+  // Allergies — loaded from API, stored with their DB ids
   const [allergies, setAllergies] = useState([]);
+  // Shape: [{ id: 1, allergen: "peanuts" }, ...]
+
+  // Diet preferences — loaded from API, stored with DB ids
+  const [diets, setDiets] = useState([]);
+  // Shape: [{ id: 1, diet_type: "spicy" }, ...]
+
+  // Allergy input field state
+  const [newAllergen, setNewAllergen] = useState("");
+  const [addingAlg, setAddingAlg] = useState(false);
+  const [algError, setAlgError] = useState("");
+
+  // Diet preference loading state
+  const [togglingDiet, setTogglingDiet] = useState(null);
+  // null or diet_type string being toggled
 
   // Account settings state
   const [reminders, setReminders] = useState(true);
@@ -77,27 +92,24 @@ export default function Profile() {
     try {
       setLoading(true);
       setError("");
-      const data = await authService.getProfile();
-      setProfile(data);
 
-      // Initialize editable fields from real profile data
-      setBudget(String(data.preferred_budget ?? 50000));
-      setServings(data.household_size ?? 2);
-      setLocation(data.location ?? "Yaoundé");
-      setFrequency(data.cooking_frequency ?? "every_2_days");
+      // Fetch allergies and diets in parallel with profile
+      const [profileData, allergyData, dietData] = await Promise.all([
+        authService.getProfile(),
+        authService.getAllergies(),
+        authService.getDiets(),
+      ]);
 
-      // diets comes as array of strings: ["spicy", "halal"]
-      // Map to the chip format the Profile UI expects
-      setPreferences(
-        (data.diets || []).map((d) => ({
-          key: d,
-          label: d.charAt(0).toUpperCase() + d.slice(1),
-          active: true,
-        }))
-      );
+      // Set all state from real API data
+      setProfile(profileData);
+      setAllergies(allergyData);
+      setDiets(dietData);
 
-      // allergies comes as array of strings: ["peanuts", "shellfish"]
-      setAllergies(data.allergies || []);
+      // Initialize other editable fields from profile...
+      setBudget(String(profileData.preferred_budget ?? 50000));
+      setServings(profileData.household_size ?? 2);
+      setLocation(profileData.location ?? "Yaoundé");
+      setFrequency(profileData.cooking_frequency ?? "every_2_days");
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -146,6 +158,84 @@ export default function Profile() {
   // ── Logout Handler ──
   function handleLogout() {
     logout();
+  }
+
+  /**
+   * Toggles a dietary preference on or off.
+   * If already active (exists in diets array) → delete it.
+   * If not active → add it.
+   *
+   * @param {string} dietType - The preference to toggle
+   */
+  async function handleDietToggle(dietType) {
+    try {
+      setTogglingDiet(dietType);
+
+      const existing = diets.find(d => d.diet_type === dietType);
+
+      if (existing) {
+        // Remove: already active
+        await authService.deleteDiet(existing.id);
+        setDiets(prev => prev.filter(d => d.id !== existing.id));
+      } else {
+        // Add: not yet active
+        const result = await authService.addDiet(dietType);
+        setDiets(prev => [...prev, { id: result.id, diet_type: dietType }]);
+      }
+
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        "Failed to update preference."
+      );
+    } finally {
+      setTogglingDiet(null);
+    }
+  }
+
+  /**
+   * Adds a new allergen to the user's list.
+   * Validates input before calling API.
+   */
+  async function handleAddAllergen() {
+    const trimmed = newAllergen.trim();
+    if (!trimmed) return;
+
+    try {
+      setAddingAlg(true);
+      setAlgError("");
+
+      const result = await authService.addAllergy(trimmed);
+      setAllergies(prev => [...prev, {
+        id: result.id,
+        allergen: result.allergen
+      }]);
+      setNewAllergen("");  // clear input
+
+    } catch (err) {
+      // Show duplicate error or other API error
+      setAlgError(
+        err.response?.data?.error ||
+        "Failed to add allergy."
+      );
+    } finally {
+      setAddingAlg(false);
+    }
+  }
+
+  /**
+   * Removes an allergen by its database ID.
+   * Updates local state immediately for instant UI feedback.
+   *
+   * @param {number} allergyId - The UserAllergy record ID
+   */
+  async function handleRemoveAllergen(allergyId) {
+    try {
+      await authService.deleteAllergy(allergyId);
+      setAllergies(prev => prev.filter(a => a.id !== allergyId));
+    } catch (err) {
+      setError("Failed to remove allergy.");
+    }
   }
 
   // ── Render ──
@@ -260,39 +350,135 @@ export default function Profile() {
 
           {/* ── Dietary Preferences section ── */}
           <div className="pt-4">
-            <h3 className="text-lg font-bold px-6 pb-2 pt-4">
+            <h3 className="text-lg font-bold px-6 pb-2 pt-4
+                           text-[#111812] dark:text-white">
               Dietary Preferences
             </h3>
+            <p className="text-xs text-[#618968] px-6 pb-3">
+              Tap to add or remove. These guide your AI meal plan.
+            </p>
             <div className="flex gap-3 px-6 py-2 flex-wrap">
-              {preferences.length > 0 ? (
-                preferences.map((pref) => (
-                  <Chip
+              {/* Predefined preference options — all toggleable */}
+              {[
+                { key: "spicy",       label: "Spicy",       icon: "local_fire_department" },
+                { key: "traditional", label: "Traditional",  icon: null },
+                { key: "halal",       label: "Halal",        icon: null },
+                { key: "vegetarian",  label: "Vegetarian",   icon: null },
+                { key: "grilled",     label: "Grilled",      icon: null },
+                { key: "vegan",       label: "Vegan",        icon: null },
+              ].map(pref => {
+                const isActive   = diets.some(d => d.diet_type === pref.key);
+                const isToggling = togglingDiet === pref.key;
+
+                return (
+                  <button
                     key={pref.key}
-                    label={pref.label}
-                    variant="dietary"
-                    active={pref.active}
-                  />
-                ))
-              ) : (
-                <p className="text-sm text-[#618968]">No preferences set</p>
-              )}
+                    type="button"
+                    onClick={() => handleDietToggle(pref.key)}
+                    disabled={isToggling}
+                    aria-pressed={isActive}
+                    className={[
+                      "flex h-10 items-center gap-2 rounded-full px-4",
+                      "text-sm font-semibold transition-all duration-150",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                      isToggling ? "opacity-50" : "",
+                      isActive
+                        ? "bg-primary text-[#111812]"
+                        : "bg-white dark:bg-[#1a2e1d] border border-gray-100 dark:border-gray-800 text-[#111812] dark:text-white",
+                    ].join(" ")}
+                  >
+                    {isActive && (
+                      <span className="material-symbols-outlined text-sm"
+                            aria-hidden="true">
+                        check_circle
+                      </span>
+                    )}
+                    {!isActive && pref.icon && (
+                      <span className="material-symbols-outlined text-sm"
+                            aria-hidden="true">
+                        {pref.icon}
+                      </span>
+                    )}
+                    <span>{pref.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* ── Allergies section ── */}
           <div className="pt-2">
-            <h3 className="text-lg font-bold px-6 pb-2 pt-4">Allergies</h3>
+            <h3 className="text-lg font-bold px-6 pb-2 pt-4
+                           text-[#111812] dark:text-white">
+              Allergies
+            </h3>
+            <p className="text-xs text-[#618968] px-6 pb-3">
+              Add any foods you cannot eat. These are excluded from AI suggestions.
+            </p>
+
+            {/* Existing allergy chips — dismissible */}
             <div className="flex gap-3 px-6 py-2 flex-wrap">
-              {allergies.length > 0 ? (
-                allergies.map((allergy) => (
-                  <Chip
-                    key={allergy}
-                    label={allergy}
-                    variant="allergy"
-                  />
-                ))
-              ) : (
-                <p className="text-sm text-[#618968]">No allergies recorded</p>
+              {allergies.map(allergy => (
+                <div
+                  key={allergy.id}
+                  className="flex h-10 items-center gap-1 rounded-full pl-4 pr-3
+                             bg-red-50 dark:bg-red-900/20
+                             border border-red-100 dark:border-red-900/30"
+                >
+                  <span className="text-red-600 dark:text-red-400 text-sm font-medium">
+                    {allergy.allergen}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAllergen(allergy.id)}
+                    aria-label={`Remove ${allergy.allergen} allergy`}
+                    className="hover:opacity-70 transition-opacity"
+                  >
+                    <span className="material-symbols-outlined text-red-400 text-base">
+                      close
+                    </span>
+                  </button>
+                </div>
+              ))}
+
+              {/* Empty state */}
+              {allergies.length === 0 && (
+                <p className="text-sm text-[#618968] px-1">
+                  No allergies added yet.
+                </p>
+              )}
+            </div>
+
+            {/* Add new allergy input */}
+            <div className="px-6 pt-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newAllergen}
+                  onChange={(e) => setNewAllergen(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddAllergen()}
+                  placeholder="e.g. peanuts, shellfish, dairy..."
+                  className="flex-1 h-11 rounded-full border border-[#dbe6dd]
+                             dark:border-white/10 bg-white dark:bg-white/5
+                             text-[#111812] dark:text-white px-4 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-primary
+                             placeholder:text-[#618968]/60"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddAllergen}
+                  disabled={addingAlg || !newAllergen.trim()}
+                  className="h-11 px-4 rounded-full bg-primary text-[#111812]
+                             text-sm font-bold disabled:opacity-50
+                             hover:bg-[#22d940] transition-colors"
+                >
+                  {addingAlg ? "..." : "Add"}
+                </button>
+              </div>
+
+              {/* Allergy error message */}
+              {algError && (
+                <p className="text-red-500 text-xs mt-2 px-1">{algError}</p>
               )}
             </div>
           </div>

@@ -63,7 +63,20 @@ export default function GroceryList() {
   const [saveToPro, setSaveToPro] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
 
+  // Save feedback toast
+  const [saveToast, setSaveToast] = useState("");
+  // Empty string = hidden, any string = shown as toast
+
   // ── Data Fetching ──
+  /**
+   * Shows a brief success toast message then auto-hides it.
+   * @param {string} message - Short message to display
+   */
+  function showToast(message) {
+    setSaveToast(message);
+    setTimeout(() => setSaveToast(""), 2000);
+  }
+
   const fetchGroceryList = useCallback(async () => {
     if (!user?.user_id) return;
     try {
@@ -124,6 +137,7 @@ export default function GroceryList() {
       await groceryService.updateItemQuantity(itemId, qty);
       await fetchGroceryList();
       setEditingId(null);
+      showToast("✓ Quantity updated");
     } catch (err) {
       setError("Failed to update quantity.");
     } finally {
@@ -141,6 +155,7 @@ export default function GroceryList() {
       setDeletingId(itemId);
       await groceryService.removeItem(itemId);
       await fetchGroceryList();
+      showToast("✓ Item removed");
     } catch (err) {
       setError("Failed to remove item.");
     } finally {
@@ -168,6 +183,7 @@ export default function GroceryList() {
       setSaveToPro(false);
       setShowAddForm(false);
       await fetchGroceryList();
+      showToast("✓ Item added");
     } catch (err) {
       setError("Failed to add ingredient.");
     } finally {
@@ -383,6 +399,16 @@ export default function GroceryList() {
                 </Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── Save feedback toast ── */}
+        {saveToast && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50
+                          bg-primary text-[#111812] font-bold text-sm
+                          px-4 py-2 rounded-full shadow-lg
+                          animate-bounce">
+            {saveToast}
           </div>
         )}
 
