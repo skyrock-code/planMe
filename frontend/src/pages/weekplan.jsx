@@ -17,6 +17,7 @@ import TopAppBar from "../components/layout/TopAppBar";
 import MealCard from "../components/ui/MealCard";
 import Button from "../components/ui/Button";
 import BottomNavBar from "../components/layout/BottomNavBar";
+import { getMealImage } from "../utils/mealImages";
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
@@ -269,7 +270,7 @@ export default function WeekPlan() {
                       layout="row"
                       mealName={dayMeal.meal_name}
                       mealType={`${day.short} Cooking Session`}
-                      imageUrl=""
+                      imageUrl={getMealImage(dayMeal?.meal_name)}
                       isToday={isToday}
                       onViewRecipe={() => {}}
                     />
