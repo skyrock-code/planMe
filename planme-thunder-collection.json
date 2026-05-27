@@ -1,0 +1,267 @@
+{
+  "client": "Thunder Client",
+  "collectionName": "PlanMe API Tests",
+  "folders": [
+    {
+      "name": "01_Auth",
+      "requests": [
+        {
+          "name": "Login",
+          "method": "POST",
+          "url": "{{base_url}}/auth/login",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "email": "admin@planme.com",
+            "password": "admin123"
+          },
+          "tests": {
+            "setToken": "const json = JSON.parse(response.body); if (json.access_token) { tc.setEnvVar('token', json.access_token); tc.setEnvVar('user_id', json.user_id); console.log('✅ Token saved'); } else { console.log('❌ Login failed'); }"
+          }
+        },
+        {
+          "name": "Get Profile",
+          "method": "GET",
+          "url": "{{base_url}}/auth/profile",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "checkProfile": "const json = JSON.parse(response.body); if (json.email) { console.log('✅ Profile loaded:', json.email); } else { console.log('❌ Profile failed'); }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02_Allergies",
+      "requests": [
+        {
+          "name": "Get Allergies",
+          "method": "GET",
+          "url": "{{base_url}}/auth/user/allergies",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "checkAllergies": "const json = JSON.parse(response.body); console.log('✅ Allergies count:', json.length);"
+          }
+        },
+        {
+          "name": "Add Allergy",
+          "method": "POST",
+          "url": "{{base_url}}/auth/user/allergies",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "allergen": "peanuts"
+          },
+          "tests": {
+            "addAllergy": "const json = JSON.parse(response.body); if (json.id) { tc.setEnvVar('allergy_id', json.id); console.log('✅ Allergy added:', json.allergen); } else { console.log('❌ Add failed'); }"
+          }
+        },
+        {
+          "name": "Delete Allergy",
+          "method": "DELETE",
+          "url": "{{base_url}}/auth/user/allergies/{{allergy_id}}",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "deleteAllergy": "console.log('✅ Allergy deleted');"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03_Diets",
+      "requests": [
+        {
+          "name": "Get Diets",
+          "method": "GET",
+          "url": "{{base_url}}/auth/user/diets",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "checkDiets": "const json = JSON.parse(response.body); console.log('✅ Diets count:', json.length);"
+          }
+        },
+        {
+          "name": "Add Diet",
+          "method": "POST",
+          "url": "{{base_url}}/auth/user/diets",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "diet_type": "spicy"
+          },
+          "tests": {
+            "addDiet": "const json = JSON.parse(response.body); if (json.id) { tc.setEnvVar('diet_id', json.id); console.log('✅ Diet added:', json.diet_type); } else { console.log('❌ Add failed'); }"
+          }
+        },
+        {
+          "name": "Delete Diet",
+          "method": "DELETE",
+          "url": "{{base_url}}/auth/user/diets/{{diet_id}}",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "deleteDiet": "console.log('✅ Diet deleted');"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04_MealPlans",
+      "requests": [
+        {
+          "name": "Create Meal Plan",
+          "method": "POST",
+          "url": "{{base_url}}/meal_plan/",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "user_id": "{{user_id}}",
+            "start_date": "2026-05-27",
+            "end_date": "2026-06-02",
+            "total_budget": 25000,
+            "cooking_frequency": "every_2_days"
+          },
+          "tests": {
+            "setPlanId": "const json = JSON.parse(response.body); if (json.plan_id) { tc.setEnvVar('plan_id', json.plan_id); console.log('✅ Plan created:', json.plan_id); } else { console.log('❌ Create failed'); }"
+          }
+        },
+        {
+          "name": "Get Plan Meals",
+          "method": "GET",
+          "url": "{{base_url}}/meal_plan/{{plan_id}}/meals",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "checkMeals": "const json = JSON.parse(response.body); console.log('✅ Meals in plan:', json.meals ? json.meals.length : 0);"
+          }
+        },
+        {
+          "name": "Assign Meal",
+          "method": "POST",
+          "url": "{{base_url}}/meal_plan/assign",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "plan_id": "{{plan_id}}",
+            "meal_id": 2,
+            "start_date": "2026-05-27",
+            "duration_days": 1
+          },
+          "tests": {
+            "assignMeal": "console.log('✅ Meal assigned');"
+          }
+        },
+        {
+          "name": "Swap Meal",
+          "method": "PUT",
+          "url": "{{base_url}}/meal_plan/swap",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "plan_id": "{{plan_id}}",
+            "old_meal_id": 2,
+            "new_meal_id": 5,
+            "start_date": "2026-05-27"
+          },
+          "tests": {
+            "swapMeal": "console.log('✅ Meal swapped');"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05_Grocery",
+      "requests": [
+        {
+          "name": "Get Grocery List",
+          "method": "GET",
+          "url": "{{base_url}}/grocery/{{plan_id}}",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "setListId": "const json = JSON.parse(response.body); if (json.list_id) { tc.setEnvVar('list_id', json.list_id); console.log('✅ Grocery list:', json.list_id, 'Items:', json.items ? json.items.length : 0); } else { console.log('❌ No grocery list'); }"
+          }
+        },
+        {
+          "name": "Add Custom Item",
+          "method": "POST",
+          "url": "{{base_url}}/grocery/{{list_id}}/add",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "name": "Tomatoes",
+            "unit_price": 500,
+            "quantity": 2,
+            "unit": "piece"
+          },
+          "tests": {
+            "addItem": "const json = JSON.parse(response.body); if (json.item_id) { tc.setEnvVar('item_id', json.item_id); console.log('✅ Item added:', json.item_id); } else { console.log('❌ Add failed'); }"
+          }
+        },
+        {
+          "name": "Update Item Quantity",
+          "method": "PATCH",
+          "url": "{{base_url}}/grocery/item/{{item_id}}",
+          "headers": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "quantity": 5
+          },
+          "tests": {
+            "updateItem": "console.log('✅ Quantity updated');"
+          }
+        },
+        {
+          "name": "Delete Item",
+          "method": "DELETE",
+          "url": "{{base_url}}/grocery/item/{{item_id}}",
+          "headers": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "tests": {
+            "deleteItem": "console.log('✅ Item deleted');"
+          }
+        }
+      ]
+    }
+  ],
+  "environments": [
+    {
+      "name": "Local Development",
+      "values": [
+        { "name": "base_url", "value": "http://127.0.0.1:5000/api" },
+        { "name": "token", "value": "" },
+        { "name": "user_id", "value": "" },
+        { "name": "plan_id", "value": "" },
+        { "name": "list_id", "value": "" },
+        { "name": "allergy_id", "value": "" },
+        { "name": "diet_id", "value": "" },
+        { "name": "item_id", "value": "" }
+      ]
+    }
+  ]
+}

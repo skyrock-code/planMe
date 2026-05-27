@@ -55,6 +55,10 @@ export default function WeekPlan() {
   const [swapTarget, setSwapTarget] = useState(null);
   const [swapping, setSwapping] = useState(false);
 
+  // Assign modal state — tracks which empty day is being filled
+  // Shape: { dateStr: "YYYY-MM-DD" } or null
+  const [assignTarget, setAssignTarget] = useState(null);
+
   // ── Data Fetching ──
   const fetchPlanData = useCallback(async () => {
     if (!user?.user_id) return;
@@ -146,30 +150,70 @@ export default function WeekPlan() {
    */
   function openSwapModal(meal) {
     setSwapTarget(meal);
+    setAssignTarget(null); // clear assign target — mutually exclusive
     setSwapModal(true);
   }
 
   /**
-   * Executes the meal swap via the backend swap endpoint.
-   * @param {number} newMealId - ID of the replacement meal
+   * Opens the meal selection modal for an EMPTY day.
+   * The selected meal will be assigned to this date
+   * via POST /api/meal_plan/assign.
+   *
+   * @param {string} dateStr - YYYY-MM-DD of the empty day
    */
-  async function handleSwap(newMealId) {
-    if (!swapTarget || !plan) return;
+  function openAssignModal(dateStr) {
+    setAssignTarget({ dateStr });
+    setSwapTarget(null); // clear swap target — mutually exclusive
+    setSwapModal(true);  // reuse same modal UI
+  }
+
+  /**
+   * Unified meal selection handler for the modal.
+   *
+   * Two cases:
+   * 1. assignTarget is set → assign meal to an empty day
+   *    calls POST /api/meal_plan/assign
+   * 2. swapTarget is set  → swap existing meal for a new one
+   *    calls PUT /api/meal_plan/swap
+   *
+   * After either action, refreshes the plan and closes the modal.
+   *
+   * @param {number} newMealId - The selected meal's ID
+   */
+  async function handleMealSelection(newMealId) {
+    if (!plan) return;
     try {
       setSwapping(true);
-      await planService.swapMeal({
-        plan_id: plan.plan_id,
-        old_meal_id: swapTarget.meal_id,
-        new_meal_id: newMealId,
-        start_date: swapTarget.start_date,
-      });
-      // Refresh plan data to show updated meal
+
+      if (assignTarget) {
+        // ── Assigning meal to an empty day ──────────────────────
+        await planService.assignMeal({
+          plan_id:       plan.plan_id,
+          meal_id:       newMealId,
+          start_date:    assignTarget.dateStr,
+          duration_days: 1,
+        });
+        setAssignTarget(null);
+
+      } else if (swapTarget) {
+        // ── Swapping existing meal for a new one ─────────────────
+        await planService.swapMeal({
+          plan_id:     plan.plan_id,
+          old_meal_id: swapTarget.meal_id,
+          new_meal_id: newMealId,
+          start_date:  swapTarget.start_date,
+        });
+        setSwapTarget(null);
+      }
+
+      // Refresh plan data to show updated meal assignments
       await fetchPlanData();
       setSwapModal(false);
-      setSwapTarget(null);
+
     } catch (err) {
       setError(
-        err.response?.data?.error || "Failed to swap meal. Please try again."
+        err.response?.data?.error ||
+        "Failed to update meal. Please try again."
       );
     } finally {
       setSwapping(false);
@@ -295,13 +339,13 @@ export default function WeekPlan() {
                     </div>
                   </>
                 ) : (
-                  /* Empty day — "Add a meal" placeholder */
+                  /* Empty day — click opens meal selection modal */
                   <div className="flex items-center justify-center p-8 border-2 border-dashed border-[#618968]/20 rounded-xl bg-white/30 dark:bg-white/5">
                     <button
                       type="button"
-                      onClick={() => navigate("/new-plan")}
+                      onClick={() => openAssignModal(day.dateStr)}
                       className="flex flex-col items-center gap-2"
-                      aria-label="Add a meal for this day"
+                      aria-label={`Add a meal for ${day.dayLabel}`}
                     >
                       <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                         <span className="material-symbols-outlined text-primary">
@@ -352,11 +396,15 @@ export default function WeekPlan() {
               {/* Modal header */}
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-[#111812] dark:text-white">
-                  Choose a Replacement Meal
+                  {assignTarget ? "Choose a Meal to Add" : "Choose a Replacement Meal"}
                 </h3>
                 <button
                   type="button"
-                  onClick={() => setSwapModal(false)}
+                  onClick={() => {
+                    setSwapModal(false);
+                    setAssignTarget(null);
+                    setSwapTarget(null);
+                  }}
                   className="text-[#618968] hover:text-primary"
                 >
                   <span className="material-symbols-outlined">close</span>
@@ -370,14 +418,14 @@ export default function WeekPlan() {
                     key={meal.meal_id}
                     type="button"
                     disabled={swapping}
-                    onClick={() => handleSwap(meal.meal_id)}
+                    onClick={() => handleMealSelection(meal.meal_id)}
                     className="flex items-center justify-between p-4 rounded-xl bg-background-light dark:bg-white/5 hover:bg-primary/10 transition-colors text-left border border-transparent hover:border-primary/20 disabled:opacity-50"
                   >
                     <span className="font-semibold text-[#111812] dark:text-white text-sm">
                       {meal.meal_name}
                     </span>
                     <span className="material-symbols-outlined text-primary text-base">
-                      swap_horiz
+                      {assignTarget ? "add_circle" : "swap_horiz"}
                     </span>
                   </button>
                 ))}
