@@ -1,92 +1,132 @@
 /**
  * @file mealImages.js
- * @description Meal image URL mapping for PlanMe.
- *              Maps meal names to relevant Unsplash photos.
- *              Used by MealCard, MealThumbnail, and Dashboard
- *              to display visually appealing meal representations.
- *
- *              Fallback image shown when no match found.
- *
+ * @description Maps meal IDs and meal names to their local image files.
+ *              Uses Vite's import.meta.glob to dynamically load all images
+ *              from src/assets/images/ at build time.
  * @module utils
  */
 
-/**
- * Map of meal names (lowercase) to Unsplash image URLs.
- * Images selected to visually represent Cameroonian cuisine.
- */
-const MEAL_IMAGES = {
-  // Soups and stews
-  "ndole and fufu corn":         "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&q=80",
-  "ndole and yam":               "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&q=80",
-  "egusi soup and yam":          "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&q=80",
-  "mbanga soup":                 "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  "achu soup":                   "https://images.unsplash.com/photo-1574484284002-952d92456975?w=400&q=80",
-  "eru and garri":               "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  "water fufu and eru":          "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  "garri and okra soup":         "https://images.unsplash.com/photo-1574484284002-952d92456975?w=400&q=80",
-  "pepper soup and plantain":    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80",
+// ─── DYNAMIC IMAGE LOADER ─────────────────────────────────────────────────────
 
-  // Rice dishes
-  "jollof rice":                 "https://images.unsplash.com/photo-1596560548464-f010549b84d7?w=400&q=80",
-  "fried rice":                  "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&q=80",
-  "rice and beans":              "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&q=80",
-  "rice and stew":               "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400&q=80",
+const mealImages = {};
 
-  // Plantain dishes
-  "poulet dg":                   "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&q=80",
-  "meat stew and plantain":      "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400&q=80",
-  "beans and plantain":          "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&q=80",
-  "canda sauce and plantain":    "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  "onion sauce and plantain":    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80",
-  "turning plantain":            "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=400&q=80",
-  "koki and plantain":           "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&q=80",
+try {
+  // Load all images from the images folder (not meals subfolder)
+  const images = import.meta.glob(
+    "../assets/images/*.{jpg,jpeg,png,webp,jfif,gif}",
+    { eager: true }
+  );
 
-  // Yam and cocoyam dishes
-  "egg sauce and yam":           "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&q=80",
-  "turning yams":                "https://images.unsplash.com/photo-1574484284002-952d92456975?w=400&q=80",
-  "porridge cocoyam":            "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  "ekwang":                      "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&q=80",
-  "kondre":                      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80",
-  "kwacoco bible and canda sauce":"https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
+  Object.entries(images).forEach(([path, image]) => {
+    // Extract filename without extension, lowercase
+    const fileName = path.split("/").pop().split(".").shift().toLowerCase();
+    mealImages[fileName] = image.default || image;
+  });
+  
+  console.log(` Loaded ${Object.keys(mealImages).length} meal images`);
 
-  // Corn and grain dishes
-  "corn chaff":                  "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&q=80",
-  "fufu corn and njama njama":   "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&q=80",
-
-  // Grilled dishes
-  "katikati":                    "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=80",
-
-  // Pasta
-  "spaghetti":                   "https://images.unsplash.com/photo-1555949258-eb67b1ef0ceb?w=400&q=80",
-
-  // Other
-  "hotpot":                      "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&q=80",
-  "meat stew and rice":          "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400&q=80",
+} catch (e) {
+  console.warn("PlanMe: Could not load meal images from assets folder.", e);
 }
 
-/**
- * Fallback image shown when no meal-specific image found.
- * Generic food/cooking image.
- */
-const FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80"
+// ─── MEAL ID → IMAGE FILENAME MAPPING ────────────────────────────────────────
 
-/**
- * Returns the image URL for a given meal name.
- * Performs case-insensitive lookup.
- * Returns fallback image if no match found.
- *
- * @param {string} mealName - The meal name to look up
- * @returns {string} Unsplash image URL
- *
- * @example
- * getMealImage("Poulet DG")     // returns poulet dg URL
- * getMealImage("Unknown Meal")  // returns fallback URL
- */
-export function getMealImage(mealName) {
-  if (!mealName) return FALLBACK_IMAGE
-  const key = mealName.toLowerCase().trim()
-  return MEAL_IMAGES[key] ?? FALLBACK_IMAGE
+const IMAGE_MAPPING_BY_ID = {
+  1:  ["achu"],
+  2:  ["acrabeans", "beans-and-plantain", "beans-plantain", "beans and plantain"],
+  3:  ["canda-sauce", "canda sauce"],
+  4:  ["cornchaff", "corn-chaff", "corn chaff"],
+  5:  ["egg-sauce-and-plantain", "egg-sauce", "egg sauce", "egg sauce and yam"],
+  6:  ["efo-egusi-1-scaled", "recipe-for-egusi-soup", "egusi-pudding", "egusi pudding", "egusi soup"],
+  7:  ["ekwang"],
+  8:  ["garri-and-eru", "garri and eru", "water-fufu-and-eru", "eru and garri"],
+  9:  ["fried-rice", "fried rice"],
+  10: ["fufu-and-njama-mjama", "fufu and njama njama", "njama-mjama"],
+  11: ["okra", "garri-and-okra-soup", "garri and okra soup", "okra-soup-and-garry"],
+  12: ["hotpot", "hot-pot-irish", "hot pot irish"],
+  13: ["jollof-rice", "jollof rice"],
+  14: ["african-grilled-chicken", "katikati", "grilled chicken"],
+  15: ["kondre"],
+  16: ["koki_beans", "koki-beans", "coki", "koki and plantain"],
+  17: ["kwakoko-bible-and-canda-sauce", "kwacoco bible", "kwakoko bible"],
+  18: ["mbanga-sauce", "mbanga sauce", "mbongo tchobi"],
+  19: ["stew-plantain", "nyama", "meat-stew-and-plantain", "meat stew and plantain"],
+  20: ["rice-and-stew", "rice and stew", "meat stew and rice"],
+  21: ["ndole", "cameroon-ndole-dish", "ndole-with-shrimps", "ndole and fufu corn"],
+  22: ["ndole", "cameroon-ndole-dish", "ndole-with-shrimps", "ndole and yam"],
+  23: ["onion-sauce", "onion sauce"],
+  24: ["pepper-soup-post-thumbnail-360x360", "pepper-soup", "pepper soup and plantain"],
+  25: ["coc-yams-porridge", "coc-yams", "porridge cocoyam"],
+  26: ["pouletdg", "poulet-dg-recipe", "poulet-dg-top-shot", "poulet dg"],
+  27: ["rice-and-beans", "rice and beans"],
+  28: ["rice-and-stew", "rice and stew"],
+  29: ["spagetti", "spaghetti"],
+  30: ["turning-plantain", "turning-planty", "turning plantain"],
+  31: ["turning-yam", "turning yams"],
+  32: ["water-fufu-and-eru", "water fufu and eru", "garri and eru"],
+};
+
+const MEAL_NAME_TO_ID = {
+  "achu soup":                      1,
+  "beans and plantain":             2,
+  "canda sauce and plantain":       3,
+  "corn chaff":                     4,
+  "egg sauce and yam":              5,
+  "egusi soup and yam":             6,
+  "ekwang":                         7,
+  "eru and garri":                  8,
+  "fried rice":                     9,
+  "fufu corn and njama njama":      10,
+  "garri and okra soup":            11,
+  "hotpot":                         12,
+  "jollof rice":                    13,
+  "katikati":                       14,
+  "kondre":                         15,
+  "koki and plantain":              16,
+  "kwacoco bible and canda sauce":  17,
+  "mbanga soup":                    18,
+  "meat stew and plantain":         19,
+  "meat stew and rice":             20,
+  "ndole and fufu corn":            21,
+  "ndole and yam":                  22,
+  "onion sauce and plantain":       23,
+  "pepper soup and plantain":       24,
+  "porridge cocoyam":               25,
+  "poulet dg":                      26,
+  "rice and beans":                 27,
+  "rice and stew":                  28,
+  "spaghetti":                      29,
+  "turning plantain":               30,
+  "turning yams":                   31,
+  "water fufu and eru":             32,
+};
+
+export function getMealImage(mealIdOrName) {
+  if (!mealIdOrName) return getFallbackImage();
+
+  let mealId;
+
+  if (typeof mealIdOrName === "number") {
+    mealId = mealIdOrName;
+  } else {
+    const nameKey = String(mealIdOrName).toLowerCase().trim();
+    mealId = MEAL_NAME_TO_ID[nameKey];
+    if (!mealId) return getFallbackImage();
+  }
+
+  const candidates = IMAGE_MAPPING_BY_ID[mealId] || [];
+  for (const candidate of candidates) {
+    const img = mealImages[candidate.toLowerCase()];
+    if (img) return img;
+  }
+
+  return getFallbackImage();
 }
 
-export default MEAL_IMAGES
+export function getFallbackImage() {
+  return mealImages["placeholder"] ||
+         mealImages["fallback"] ||
+         "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300";
+}
+
+export default { getMealImage, getFallbackImage };

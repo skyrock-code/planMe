@@ -1,80 +1,88 @@
-import api from "./api";
-
 /**
  * @file groceryService.js
- * @description Grocery List service for the PlanMe app.
- *              Handles all communication with Flask grocery endpoints.
- *
- * Endpoints covered:
- *   GET    /api/grocery/<plan_id>           - Generate + get grocery list
- *   GET    /api/grocery/<plan_id>/saved     - Get saved grocery list
- *   PATCH  /api/grocery/item/<item_id>      - Update item quantity
- *   DELETE /api/grocery/item/<item_id>      - Remove item from list
- *   POST   /api/grocery/<list_id>/add       - Add custom ingredient
- *   GET    /api/grocery/personal/<user_id>  - Get user's saved ingredients
- *   DELETE /api/grocery/personal/item/<id>  - Delete saved ingredient
- * @module services
+ * @description API service layer for all grocery list operations.
+ *              Separates data fetching from regeneration so manual
+ *              edits are never accidentally overwritten.
  */
 
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:5000/api",
+});
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("access_token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 const groceryService = {
+  /**
+   * Fetch existing grocery list WITHOUT regenerating from meals.
+   * This is the default load on every page visit — preserves manual edits.
+   * Returns 404 if no list has been generated yet.
+   */
+  async fetchList(planId) {
+    const res = await api.get(`/grocery/${planId}/saved`);
+    return res.data;
+  },
 
   /**
-   * Generates and returns the grocery list for a meal plan.
-   * Aggregates all ingredients from all meals in the plan.
-   * Calling this multiple times is safe — it regenerates auto items
-   * but preserves custom items the user added.
+   * Generate (or regenerate) the grocery list from meal ingredients.
+   * Overwrites all auto-generated items — custom items are preserved.
+   * Call only on first load (404 from fetchList) or explicit user request.
    */
-
-  async generateGroceryList(planId) {
-    const response = await api.get(`/grocery/${planId}`);
-    return response.data;
+  async generateList(planId) {
+    const res = await api.get(`/grocery/${planId}`);
+    return res.data;
   },
 
-  //   * Fetches the saved grocery list without regenerating it.
-  async getSavedGroceryList(planId) {
-    const response = await api.get(`/grocery/${planId}/saved`);
-    return response.data;
+  /**
+   * Persist a quantity change for a single grocery list item.
+   * @param {number} itemId
+   * @param {number} quantity
+   */
+  async updateQuantity(itemId, quantity) {
+    const res = await api.patch(`/grocery/item/${itemId}`, { quantity });
+    return res.data;
   },
 
-
-  async updateItemQuantity(itemId, quantity) {
-    const response = await api.patch(`/grocery/item/${itemId}`, {
-      quantity: Number(quantity),
-    });
-    return response.data;
-  },
-
+  /**
+   * Remove a single item from the grocery list.
+   * @param {number} itemId
+   */
   async removeItem(itemId) {
-    const response = await api.delete(`/grocery/item/${itemId}`);
-    return response.data;
+    const res = await api.delete(`/grocery/item/${itemId}`);
+    return res.data;
   },
 
-    /**
-   * Adds a custom ingredient to an existing grocery list.
-   * This handles local/traditional ingredients not in the database.
-   * Optionally saves the ingredient to the user's personal list for reuse.
+  /**
+   * Add an ingredient to the grocery list.
+   *
+   * Two modes:
+   * - DB ingredient: pass { ingredient_id, quantity }
+   * - Custom item:   pass { name, unit, unit_price, quantity }
+   *
+   * @param {number} listId
+   * @param {object} payload
    */
-   
-  async addCustomIngredient(listId, itemData) {
-    const response = await api.post(`/grocery/${listId}/add`, {
-      name:            itemData.name,
-      unit_price:      Number(itemData.unit_price),
-      quantity:        Number(itemData.quantity),
-      unit:            itemData.unit            || null,
-      save_to_profile: itemData.save_to_profile || false,
-      user_id:         itemData.user_id         || null,
+  async addIngredient(listId, payload) {
+    const res = await api.post(`/grocery/${listId}/add`, payload);
+    return res.data;
+  },
+
+  /**
+   * Search the ingredients database by name.
+   * Returns up to 10 matching ingredients with unit and price.
+   * @param {string} query — minimum 2 characters
+   */
+  async searchIngredients(query) {
+    const res = await api.get(`/ingredients/search`, {
+      params: { q: query },
     });
-    return response.data;
-  },
-
-  async getPersonalIngredients(userId) {
-    const response = await api.get(`/grocery/personal/${userId}`);
-    return response.data;
-  },
-
-  async deletePersonalIngredient(ingredientId) {
-    const response = await api.delete(`/grocery/personal/item/${ingredientId}`);
-    return response.data;
+    return res.data;
   },
 };
 
