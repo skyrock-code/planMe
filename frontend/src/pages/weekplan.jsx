@@ -17,25 +17,12 @@ import TopAppBar from "../components/layout/TopAppBar";
 import MealCard from "../components/ui/MealCard";
 import Button from "../components/ui/Button";
 import BottomNavBar from "../components/layout/BottomNavBar";
-import { getMealImage } from "../utils/mealImages";
+import { getMealDescription } from "../utils/mealDescriptions";
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 /**
  * WeekPlan page component.
- *
- * Shows the generated weekly meal plan with:
- * - A 7-day calendar strip with real dates
- * - Assigned meals for each day
- * - Ability to swap meals with other options
- * - Full calendar view of the plan period
- *
- * Can be accessed via:
- * - /week-plan/:planId — load specific plan by ID
- * - /week-plan — load most recent plan for logged-in user
- *
- * @component
- * @returns {JSX.Element}
  */
 export default function WeekPlan() {
   const navigate = useNavigate();
@@ -55,8 +42,7 @@ export default function WeekPlan() {
   const [swapTarget, setSwapTarget] = useState(null);
   const [swapping, setSwapping] = useState(false);
 
-  // Assign modal state — tracks which empty day is being filled
-  // Shape: { dateStr: "YYYY-MM-DD" } or null
+  // Assign modal state
   const [assignTarget, setAssignTarget] = useState(null);
 
   // ── Data Fetching ──
@@ -68,11 +54,9 @@ export default function WeekPlan() {
 
       let targetPlanId = urlPlanId;
 
-      // If no planId in URL, fetch user's most recent plan
       if (!targetPlanId) {
         const userPlans = await planService.getUserPlans(user.user_id);
         if (userPlans.length === 0) {
-          // No plans exist — redirect to NewPlan
           navigate("/new-plan");
           return;
         }
@@ -82,7 +66,6 @@ export default function WeekPlan() {
         targetPlanId = mostRecent.plan_id;
       }
 
-      // Fetch plan meals and all available meals in parallel
       const [planData, allMealsData] = await Promise.all([
         planService.getPlanMeals(targetPlanId),
         mealService.getAllMeals(),
@@ -106,13 +89,8 @@ export default function WeekPlan() {
   }, [fetchPlanData]);
 
   // ── Week Days Generation ──
-  /**
-   * Generates an array of 7 day objects for the calendar strip.
-   * Uses the plan's start_date if available.
-   */
   function getWeekDays(startDateStr) {
     const start = startDateStr ? new Date(startDateStr) : new Date();
-
     return Array.from({ length: 7 }, (_, i) => {
       const date = new Date(start);
       date.setDate(start.getDate() + i);
@@ -123,97 +101,61 @@ export default function WeekPlan() {
           month: "short",
           day: "numeric",
         }),
-        dateStr: date.toISOString().split("T")[0], // YYYY-MM-DD
+        dateStr: date.toISOString().split("T")[0],
         dateNum: date.getDate(),
       };
     });
   }
 
-  // Inside component body (before return):
   const weekDays = plan ? getWeekDays(plan.start_date) : [];
 
-  /**
-   * Finds the meal assigned to a specific date.
-   * @param {string} dateStr - YYYY-MM-DD format
-   * @returns {Object|null} Meal assignment or null if no meal
-   */
   function getMealForDay(dateStr) {
     return (
       meals.find((m) => m.start_date <= dateStr && dateStr <= m.ends_on) || null
     );
   }
 
-  // ── Swap Meal Feature ──
-  /**
-   * Opens the swap modal targeting a specific meal assignment.
-   * @param {Object} meal - The meal assignment to swap
-   */
+  // ── Modal Handlers ──
   function openSwapModal(meal) {
     setSwapTarget(meal);
-    setAssignTarget(null); // clear assign target — mutually exclusive
+    setAssignTarget(null);
     setSwapModal(true);
   }
 
-  /**
-   * Opens the meal selection modal for an EMPTY day.
-   * The selected meal will be assigned to this date
-   * via POST /api/meal_plan/assign.
-   *
-   * @param {string} dateStr - YYYY-MM-DD of the empty day
-   */
   function openAssignModal(dateStr) {
     setAssignTarget({ dateStr });
-    setSwapTarget(null); // clear swap target — mutually exclusive
-    setSwapModal(true);  // reuse same modal UI
+    setSwapTarget(null);
+    setSwapModal(true);
   }
 
-  /**
-   * Unified meal selection handler for the modal.
-   *
-   * Two cases:
-   * 1. assignTarget is set → assign meal to an empty day
-   *    calls POST /api/meal_plan/assign
-   * 2. swapTarget is set  → swap existing meal for a new one
-   *    calls PUT /api/meal_plan/swap
-   *
-   * After either action, refreshes the plan and closes the modal.
-   *
-   * @param {number} newMealId - The selected meal's ID
-   */
   async function handleMealSelection(newMealId) {
     if (!plan) return;
     try {
       setSwapping(true);
 
       if (assignTarget) {
-        // ── Assigning meal to an empty day ──────────────────────
         await planService.assignMeal({
-          plan_id:       plan.plan_id,
-          meal_id:       newMealId,
-          start_date:    assignTarget.dateStr,
+          plan_id: plan.plan_id,
+          meal_id: newMealId,
+          start_date: assignTarget.dateStr,
           duration_days: 1,
         });
         setAssignTarget(null);
-
       } else if (swapTarget) {
-        // ── Swapping existing meal for a new one ─────────────────
         await planService.swapMeal({
-          plan_id:     plan.plan_id,
+          plan_id: plan.plan_id,
           old_meal_id: swapTarget.meal_id,
           new_meal_id: newMealId,
-          start_date:  swapTarget.start_date,
+          start_date: swapTarget.start_date,
         });
         setSwapTarget(null);
       }
 
-      // Refresh plan data to show updated meal assignments
       await fetchPlanData();
       setSwapModal(false);
-
     } catch (err) {
       setError(
-        err.response?.data?.error ||
-        "Failed to update meal. Please try again."
+        err.response?.data?.error || "Failed to update meal. Please try again."
       );
     } finally {
       setSwapping(false);
@@ -230,7 +172,7 @@ export default function WeekPlan() {
     >
       <div className="min-h-screen bg-background-light dark:bg-background-dark">
 
-        {/* ── Sticky top bar with date range ── */}
+        {/* Top bar */}
         <TopAppBar
           title="Weekly Meal Plan"
           subtitle={
@@ -243,12 +185,9 @@ export default function WeekPlan() {
           onRightAction={() => {}}
         />
 
-        {/* ── 7-day calendar strip ── */}
+        {/* Calendar strip */}
         <div className="px-4 py-2">
-          <div
-            className="flex gap-2 overflow-x-auto pb-4"
-            style={{ scrollbarWidth: "none" }}
-          >
+          <div className="flex gap-2 overflow-x-auto pb-4" style={{ scrollbarWidth: "none" }}>
             {weekDays.map((day, index) => {
               const isActive = index === selectedDay;
               const dayMeal = getMealForDay(day.dateStr);
@@ -257,8 +196,6 @@ export default function WeekPlan() {
                   key={day.dateStr}
                   type="button"
                   onClick={() => setSelectedDay(index)}
-                  aria-label={`${day.short} ${day.dateNum}`}
-                  aria-pressed={isActive}
                   className={[
                     "flex flex-col items-center justify-center min-w-[50px] h-20 rounded-full transition-all",
                     isActive
@@ -266,22 +203,12 @@ export default function WeekPlan() {
                       : "bg-white dark:bg-white/5 border border-[#618968]/20 text-[#111812] dark:text-white",
                   ].join(" ")}
                 >
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wider ${
-                      isActive ? "text-white" : "text-[#618968]"
-                    }`}
-                  >
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isActive ? "text-white" : "text-[#618968]"}`}>
                     {day.short}
                   </span>
                   <span className="text-xl font-extrabold">{day.dateNum}</span>
-
-                  {/* Dot indicator for days that have a meal */}
                   {dayMeal && (
-                    <div
-                      className={`w-1 h-1 rounded-full mt-1 ${
-                        isActive ? "bg-white" : "bg-primary"
-                      }`}
-                    />
+                    <div className={`w-1 h-1 rounded-full mt-1 ${isActive ? "bg-white" : "bg-primary"}`} />
                   )}
                 </button>
               );
@@ -289,15 +216,15 @@ export default function WeekPlan() {
           </div>
         </div>
 
-        {/* ── Meal plan feed ── */}
+        {/* Meal plan feed */}
         <main className="flex flex-col gap-2 px-4 pb-40">
           {weekDays.map((day, index) => {
             const dayMeal = getMealForDay(day.dateStr);
-            const isToday = index === 0; // First day of plan is "today"
+            const isToday = index === 0;
 
             return (
               <div key={day.dateStr}>
-                {/* Day label + "Today" badge */}
+                {/* Day label */}
                 <h3 className="text-[#111812] dark:text-white text-base font-bold py-3 flex items-center gap-2">
                   {day.dayLabel}
                   {isToday && (
@@ -307,18 +234,19 @@ export default function WeekPlan() {
                   )}
                 </h3>
 
-                {/* Meal card or empty day placeholder */}
                 {dayMeal ? (
                   <>
+                    {/* Meal Card - description passed as prop (inside the card) */}
                     <MealCard
                       layout="row"
                       mealName={dayMeal.meal_name}
                       mealType={`${day.short} Cooking Session`}
-                      imageUrl={getMealImage(dayMeal?.meal_name)}
+                      mealId={dayMeal.meal_id}
+                      description={getMealDescription(dayMeal.meal_id)}
                       isToday={isToday}
-                      onViewRecipe={() => {}}
                     />
-                    {/* Swap and View buttons */}
+                    
+                    {/* Swap button only */}
                     <div className="flex gap-2 mt-2">
                       <Button
                         variant="ghost"
@@ -328,33 +256,20 @@ export default function WeekPlan() {
                       >
                         Swap
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon="visibility"
-                        onClick={() => {}}
-                      >
-                        View
-                      </Button>
                     </div>
                   </>
                 ) : (
-                  /* Empty day — click opens meal selection modal */
+                  /* Empty day placeholder */
                   <div className="flex items-center justify-center p-8 border-2 border-dashed border-[#618968]/20 rounded-xl bg-white/30 dark:bg-white/5">
                     <button
                       type="button"
                       onClick={() => openAssignModal(day.dateStr)}
                       className="flex flex-col items-center gap-2"
-                      aria-label={`Add a meal for ${day.dayLabel}`}
                     >
                       <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-primary">
-                          add
-                        </span>
+                        <span className="material-symbols-outlined text-primary">add</span>
                       </div>
-                      <span className="text-sm font-bold text-[#618968]">
-                        Add a meal
-                      </span>
+                      <span className="text-sm font-bold text-[#618968]">Add a meal</span>
                     </button>
                   </div>
                 )}
@@ -363,37 +278,28 @@ export default function WeekPlan() {
           })}
         </main>
 
-        {/* ── Fixed bottom action bar ── */}
+        {/* Bottom action bar */}
         <div className="fixed bottom-16 left-0 right-0 max-w-[430px] mx-auto px-4 py-3 bg-white/95 dark:bg-background-dark/95 border-t border-[#618968]/10">
           <div className="flex gap-3">
-            {/* Edit current plan */}
-            <Button
-              variant="outline"
-              size="md"
-              className="flex-1"
-              onClick={() => navigate("/new-plan")}
-            >
+            <Button variant="outline" size="md" className="flex-1" onClick={() => navigate("/new-plan")}>
               Edit Plan
             </Button>
-
-            {/* Generate grocery list from this plan */}
             <Button
               variant="primary"
               size="md"
               icon="shopping_cart"
               className="flex-[2]"
-              onClick={() => navigate(`/grocery/${plan.plan_id}`)}
+              onClick={() => plan && navigate(`/grocery/${plan.plan_id}`)}
             >
               Generate Grocery List
             </Button>
           </div>
         </div>
 
-        {/* ── Meal Swap Modal ── */}
+        {/* Modal */}
         {swapModal && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-end">
-            <div className="w-full max-w-[430px] mx-auto bg-white dark:bg-background-dark rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto">
-              {/* Modal header */}
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+            <div className="w-full max-w-[430px] mx-4 bg-white dark:bg-background-dark rounded-2xl p-6 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-[#111812] dark:text-white">
                   {assignTarget ? "Choose a Meal to Add" : "Choose a Replacement Meal"}
@@ -411,30 +317,54 @@ export default function WeekPlan() {
                 </button>
               </div>
 
-              {/* Meal list */}
               <div className="flex flex-col gap-2">
-                {allMeals.map((meal) => (
-                  <button
-                    key={meal.meal_id}
-                    type="button"
-                    disabled={swapping}
-                    onClick={() => handleMealSelection(meal.meal_id)}
-                    className="flex items-center justify-between p-4 rounded-xl bg-background-light dark:bg-white/5 hover:bg-primary/10 transition-colors text-left border border-transparent hover:border-primary/20 disabled:opacity-50"
-                  >
-                    <span className="font-semibold text-[#111812] dark:text-white text-sm">
-                      {meal.meal_name}
-                    </span>
-                    <span className="material-symbols-outlined text-primary text-base">
-                      {assignTarget ? "add_circle" : "swap_horiz"}
-                    </span>
-                  </button>
-                ))}
+                {allMeals.length === 0 ? (
+                  <div className="text-center py-8 text-[#618968]">
+                    <span className="material-symbols-outlined text-4xl mb-2">restaurant_menu</span>
+                    <p>No meals available</p>
+                  </div>
+                ) : (
+                  allMeals.map((meal) => (
+                    <button
+                      key={meal.meal_id}
+                      type="button"
+                      disabled={swapping}
+                      onClick={() => handleMealSelection(meal.meal_id)}
+                      className="flex items-center justify-between p-4 rounded-xl bg-background-light dark:bg-white/5 hover:bg-primary/10 transition-all text-left border border-transparent hover:border-primary/20 disabled:opacity-50"
+                    >
+                      <div>
+                        <span className="font-semibold text-[#111812] dark:text-white text-sm">
+                          {meal.meal_name}
+                        </span>
+                        <p className="text-xs text-[#618968] mt-0.5">
+                          {meal.cuisine_type || "Traditional"} · {meal.servings} servings
+                        </p>
+                      </div>
+                      <span className="material-symbols-outlined text-primary text-base">
+                        {assignTarget ? "add_circle" : "swap_horiz"}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwapModal(false);
+                    setAssignTarget(null);
+                    setSwapTarget(null);
+                  }}
+                  className="w-full py-3 text-center text-[#618968] font-medium hover:text-primary transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Fixed bottom navigation ── */}
         <BottomNavBar />
       </div>
     </PageWrapper>
