@@ -500,16 +500,23 @@ class MealPlan(db.Model):
 class MealPlanMeal(db.Model):
     __tablename__ = "meal_plan_meal"
 
+    # ── Own auto-increment primary key ────────────────────
+    # Previously plan_id + meal_id was the composite PK.
+    # That prevented the same meal appearing twice in a plan.
+    # Now each assignment row has its own unique ID,
+    # allowing Ndolé on Monday AND Ndolé on Friday.
+    id = db.Column(db.Integer, primary_key=True)
+
     plan_id = db.Column(
         db.Integer,
         db.ForeignKey("meal_plan.plan_id"),
-        primary_key=True
+        nullable=False
     )
 
     meal_id = db.Column(
         db.Integer,
         db.ForeignKey("meal.meal_id"),
-        primary_key=True
+        nullable=False
     )
 
     start_date = db.Column(
@@ -532,7 +539,8 @@ class MealPlanMeal(db.Model):
         return (
             f"<MealPlanMeal "
             f"plan={self.plan_id} "
-            f"meal={self.meal_id}>"
+            f"meal={self.meal_id} "
+            f"date={self.start_date}>"
         )
 
 
