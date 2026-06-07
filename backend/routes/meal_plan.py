@@ -1,4 +1,3 @@
-import random
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from extensions import db
@@ -6,6 +5,7 @@ from models import (
     MealPlan, Meal, MealPlanMeal,
     User, GroceryList, GroceryListItem,
 )
+from services.meal_filter_service import MealFilterService
 
 meal_plan_bp = Blueprint('meal_plan', __name__)
 
@@ -271,10 +271,9 @@ def swap_meal():
 # GENERATE MEAL PLAN AUTOMATICALLY
 # POST /api/meal_plan/generate
 #
-# Creates a new MealPlan, populates it with
-# meals filtered by the user's allergies and
-# dietary preferences, respects the budget,
-# and auto-generates the grocery list.
+# Delegates filtering and schedule generation
+# to MealFilterService, then persists the
+# result and builds the grocery list.
 #
 # Request body:
 # {
@@ -302,14 +301,9 @@ def generate_plan():
     if end_date <= start_date:
         return jsonify({"error": "end_date must be after start_date"}), 400
 
-    # ── Step 1: Load user ─────────────────────────────────────────────
     user = User.query.get(data['user_id'])
     if not user:
         return jsonify({"error": "User not found"}), 404
-
-    # ── Step 2-3: Load allergens and diet preferences ─────────────────
-    user_allergens = {ua.allergen.lower() for ua in user.allergies}
-    user_diets     = {ud.diet_type.lower() for ud in user.diets}
 
     cooking_frequency = (
         data.get('cooking_frequency')
@@ -318,67 +312,29 @@ def generate_plan():
     )
     total_budget = float(data['total_budget'])
 
-    # ── Step 4: Retrieve all available meals ──────────────────────────
-    all_meals = Meal.query.all()
+    service = MealFilterService()
 
-    # ── Step 5: Filter by allergies ───────────────────────────────────
-    # A meal is safe if none of its ingredients carry a user allergen.
-    safe_meals = []
-    for meal in all_meals:
-        meal_allergens = {
-            ia.allergen.lower()
-            for mi in meal.ingredients
-            for ia in mi.ingredient.allergens
-        }
-        if not (meal_allergens & user_allergens):
-            safe_meals.append(meal)
-
-    # ── Step 6: Filter by dietary preferences ─────────────────────────
-    # Only apply diet filter when the user has set preferences.
-    # If filtering would leave zero meals, fall back to allergy-safe pool.
-    if user_diets:
-        diet_filtered = [
-            m for m in safe_meals
-            if any(tag.diet_type.lower() in user_diets for tag in m.diet_tags)
-        ]
-        if diet_filtered:
-            safe_meals = diet_filtered
-
-    if not safe_meals:
+    # Validate that at least one eligible meal exists before creating a plan
+    if not service.get_eligible_meals(user.user_id):
         return jsonify({
             "error": "No suitable meals found matching your allergies and dietary preferences"
         }), 400
 
-    # ── Step 7-8: Build cooking schedule ──────────────────────────────
-    # step     = days between cooking sessions
-    # duration = how many days one cooked batch covers
-    # twice    = cook two separate meals on the same day
-    freq_config = {
-        'once_daily':   {'step': 1, 'duration': 1, 'twice': False},
-        'twice_daily':  {'step': 1, 'duration': 1, 'twice': True},
-        'every_2_days': {'step': 2, 'duration': 2, 'twice': False},
-        'every_3_days': {'step': 3, 'duration': 3, 'twice': False},
-        'flexible':     {'step': 2, 'duration': 2, 'twice': False},
-    }
-    cfg      = freq_config.get(cooking_frequency, freq_config['every_2_days'])
-    step     = cfg['step']
-    duration = cfg['duration']
-    twice    = cfg['twice']
-
-    # Each entry: (cook_date, actual_duration_days)
-    schedule = []
-    current = start_date
-    while current <= end_date:
-        actual_dur = min(duration, (end_date - current).days + 1)
-        schedule.append((current, actual_dur))
-        if twice:
-            schedule.append((current, actual_dur))
-        current += timedelta(days=step)
+    # Delegate schedule generation to the service
+    schedule = service.generate_weekly_plan(
+        user_id           = user.user_id,
+        budget            = total_budget,
+        cooking_frequency = cooking_frequency,
+        start_date        = start_date,
+        end_date          = end_date,
+    )
 
     if not schedule:
-        return jsonify({"error": "No cooking days found in the given date range"}), 400
+        return jsonify({
+            "error": "Could not schedule any meals. Try a higher budget or fewer diet restrictions."
+        }), 400
 
-    # ── Create the plan record ────────────────────────────────────────
+    # ── Persist the plan ──────────────────────────────────────────────
     plan = MealPlan(
         user_id           = user.user_id,
         start_date        = start_date,
@@ -387,60 +343,27 @@ def generate_plan():
         cooking_frequency = cooking_frequency,
     )
     db.session.add(plan)
-    db.session.flush()  # obtain plan.plan_id before commit
+    db.session.flush()
 
-    # ── Step 9: Assign meals with budget awareness ────────────────────
-    def estimate_cost(meal, dur):
-        return round(
-            sum(mi.quantity * mi.ingredient.unit_price_xaf for mi in meal.ingredients) * dur,
-            2
-        )
-
-    remaining_budget = total_budget
-    assignments      = []
-    last_meal_id     = None
-
-    for cook_date, dur in schedule:
-        # Prefer meals within remaining budget; fall back to cheapest if none fit
-        affordable = [m for m in safe_meals if estimate_cost(m, dur) <= remaining_budget]
-        if not affordable:
-            affordable = sorted(safe_meals, key=lambda m: estimate_cost(m, dur))[:3]
-
-        # Avoid repeating the immediately previous meal when possible
-        candidates = affordable
-        if len(affordable) > 1 and last_meal_id is not None:
-            no_repeat = [m for m in affordable if m.meal_id != last_meal_id]
-            if no_repeat:
-                candidates = no_repeat
-
-        chosen = random.choice(candidates)
-        cost   = estimate_cost(chosen, dur)
-
+    for slot in schedule:
         db.session.add(MealPlanMeal(
             plan_id       = plan.plan_id,
-            meal_id       = chosen.meal_id,
-            start_date    = cook_date,
-            duration_days = dur,
+            meal_id       = slot['meal_id'],
+            start_date    = slot['date'],
+            duration_days = slot['duration_days'],
         ))
-        assignments.append({'meal_id': chosen.meal_id, 'cost': cost, 'duration_days': dur})
-        remaining_budget -= cost
-        last_meal_id = chosen.meal_id
 
-    if not assignments:
-        db.session.rollback()
-        return jsonify({"error": "Could not schedule any meals. Try a higher budget or fewer diet restrictions."}), 400
-
-    # ── Step 10: Generate grocery list ───────────────────────────────
+    # ── Build grocery list from the schedule ──────────────────────────
     grocery_list = GroceryList(plan_id=plan.plan_id, total_price=0.0)
     db.session.add(grocery_list)
     db.session.flush()
 
     grocery_map = {}
-    for a in assignments:
-        meal = Meal.query.get(a['meal_id'])
+    for slot in schedule:
+        meal = Meal.query.get(slot['meal_id'])
         for mi in meal.ingredients:
             ing  = mi.ingredient
-            qty  = round(mi.quantity * a['duration_days'], 3)
+            qty  = round(mi.quantity * slot['duration_days'], 3)
             cost = round(qty * ing.unit_price_xaf, 2)
             if ing.id in grocery_map:
                 grocery_map[ing.id]['quantity']    += qty
@@ -474,14 +397,14 @@ def generate_plan():
     return jsonify({
         "message":         "Meal plan generated successfully",
         "plan_id":         plan.plan_id,
-        "meals_assigned":  len(assignments),
+        "meals_assigned":  len(schedule),
         "estimated_cost":  round(total_cost, 2),
         "total_budget":    total_budget,
         "within_budget":   round(total_cost, 2) <= total_budget,
         "grocery_list_id": grocery_list.list_id,
         "filters_applied": {
-            "allergens_excluded": sorted(user_allergens),
-            "diet_preferences":   sorted(user_diets),
+            "allergens_excluded": sorted({ua.allergen.lower() for ua in user.allergies}),
+            "diet_preferences":   sorted({ud.diet_type.lower() for ud in user.diets}),
             "cooking_frequency":  cooking_frequency,
         },
     }), 201
