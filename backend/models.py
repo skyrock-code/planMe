@@ -256,6 +256,15 @@ class Ingredient(db.Model):
         nullable=False
     )
 
+    # Ingredient category for allergen grouping, substitution, and nutrition balancing.
+    # Allowed values: grain, protein, vegetable, fruit, dairy, nut, seafood,
+    # oil, spice, legume, other
+    category = db.Column(
+        db.String(50),
+        nullable=True,
+        default="other"
+    )
+
     # Relationships
     allergens = db.relationship(
         "IngredientAllergen",

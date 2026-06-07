@@ -128,6 +128,7 @@ def get_all_meals():
             "meal_name":    meal.meal_name,
             "cuisine_type": meal.cuisine_type,
             "servings":     meal.servings,
+            "diet_tags":    [tag.diet_type for tag in meal.diet_tags],
         }
         for meal in meals
     ]
