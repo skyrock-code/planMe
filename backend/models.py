@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 # ─────────────────────────────────────────
-# USER
+# 1 USER
 # ─────────────────────────────────────────
 class User(db.Model):
     __tablename__ = "user"
@@ -108,7 +108,7 @@ class User(db.Model):
     
 
 # ─────────────────────────────────────────
-# USER ALLERGY
+# 2.USER ALLERGY
 # ─────────────────────────────────────────
 class UserAllergy(db.Model):
     __tablename__ = "user_allergy"
@@ -154,7 +154,7 @@ class UserDiet(db.Model):
 
 
 # ─────────────────────────────────────────
-# USER SAVED INGREDIENTS
+# 4.USER SAVED INGREDIENTS
 # ─────────────────────────────────────────
 class UserIngredient(db.Model):
     __tablename__ = "user_ingredient"
@@ -181,7 +181,7 @@ class UserIngredient(db.Model):
 
 
 # ─────────────────────────────────────────
-# MEAL
+#5. MEAL
 # ─────────────────────────────────────────
 class Meal(db.Model):
     __tablename__ = "meal"
@@ -226,7 +226,7 @@ class Meal(db.Model):
 
 
 # ─────────────────────────────────────────
-# INGREDIENT
+# 6. INGREDIENT
 # Market unit = how ingredient is sold
 # Example:
 # Rice → kg
@@ -276,7 +276,7 @@ class Ingredient(db.Model):
 
 
 # ─────────────────────────────────────────
-# UNIT CONVERSION
+# 7. UNIT CONVERSION
 #
 # Bridges:
 # cooking unit → market unit
@@ -332,7 +332,7 @@ class UnitConversion(db.Model):
 
 
 # ─────────────────────────────────────────
-# INGREDIENT ALLERGEN
+# 8. INGREDIENT ALLERGEN
 # ─────────────────────────────────────────
 class IngredientAllergen(db.Model):
     __tablename__ = "ingredient_allergen"
@@ -355,7 +355,7 @@ class IngredientAllergen(db.Model):
 
 
 # ─────────────────────────────────────────
-# MEAL INGREDIENT
+# 9. MEAL INGREDIENT
 #
 # quantity + cooking_unit represent
 # how ingredient appears in recipe
@@ -404,7 +404,7 @@ class MealIngredient(db.Model):
 
 
 # ─────────────────────────────────────────
-# MEAL DIET TAG
+# 10. MEAL DIET TAG
 # ─────────────────────────────────────────
 class MealDietTag(db.Model):
     __tablename__ = "meal_diet_tag"
@@ -427,7 +427,7 @@ class MealDietTag(db.Model):
 
 
 # ─────────────────────────────────────────
-# MEAL PLAN
+# 11. MEAL PLAN
 # ─────────────────────────────────────────
 class MealPlan(db.Model):
     __tablename__ = "meal_plan"
@@ -495,7 +495,7 @@ class MealPlan(db.Model):
 
 
 # ─────────────────────────────────────────
-# MEAL PLAN MEAL
+#11.MEAL PLAN MEAL
 # ─────────────────────────────────────────
 class MealPlanMeal(db.Model):
     __tablename__ = "meal_plan_meal"
@@ -545,7 +545,7 @@ class MealPlanMeal(db.Model):
 
 
 # ─────────────────────────────────────────
-# GROCERY LIST
+# 12. GROCERY LIST
 # ─────────────────────────────────────────
 class GroceryList(db.Model):
     __tablename__ = "grocery_list"
@@ -583,7 +583,7 @@ class GroceryList(db.Model):
 
 
 # ─────────────────────────────────────────
-# GROCERY LIST ITEM
+# 13. GROCERY LIST ITEM
 #
 # quantity stored AFTER conversion
 # into market unit
