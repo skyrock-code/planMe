@@ -40,12 +40,14 @@ const groceryService = {
   },
 
   /**
-   * Persist a quantity change for a single grocery list item.
+   * Update quantity and/or unit_price for a single grocery list item.
+   * Pass { quantity } or { unit_price } or both.
+   * Returns updated item values and the new list total.
    * @param {number} itemId
-   * @param {number} quantity
+   * @param {{ quantity?: number, unit_price?: number }} updates
    */
-  async updateQuantity(itemId, quantity) {
-    const res = await api.patch(`/grocery/item/${itemId}`, { quantity });
+  async updateItem(itemId, updates) {
+    const res = await api.patch(`/grocery/item/${itemId}`, updates);
     return res.data;
   },
 
