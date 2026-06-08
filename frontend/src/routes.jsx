@@ -22,12 +22,12 @@ import { Routes, Route } from "react-router-dom";
 // ─── PAGE IMPORTS ─────────────────────────────────────────────────────────────
 // Note: filenames must match EXACTLY (case-sensitive) to avoid Vite import errors.
 
-import Login       from "./pages/Login";
-import Dashboard   from "./pages/Dashboard";
-import NewPlan     from "./pages/NewPlan";
-import WeekPlan    from "./pages/WeekPlan";
-import GroceryList from "./pages/GroceryList";
-import Profile     from "./pages/Profile";
+import Login       from "./pages/login";
+import Dashboard   from "./pages/dashboard";
+import NewPlan     from "./pages/newplan";
+import WeekPlan    from "./pages/weekplan";
+import GroceryList from "./pages/groceryList";
+import Profile     from "./pages/profile";
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
