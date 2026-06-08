@@ -17,7 +17,7 @@
  * @module pages
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import TopAppBar from "../components/layout/TopAppBar";
@@ -34,6 +34,26 @@ function formatFCFA(amount) {
 
 function round2(n) {
   return Math.round(n * 100) / 100;
+}
+
+// ─── CATEGORY CONFIG ──────────────────────────────────────────────────────────
+
+const CATEGORY_ORDER = ["Proteins", "Starches", "Vegetables", "Spices", "Oils", "Other"];
+
+const CATEGORY_STYLES = {
+  Proteins:   { border: "border-red-400",    text: "text-red-600 dark:text-red-400"       },
+  Starches:   { border: "border-yellow-400", text: "text-yellow-700 dark:text-yellow-400" },
+  Vegetables: { border: "border-green-500",  text: "text-green-700 dark:text-green-400"   },
+  Spices:     { border: "border-orange-400", text: "text-orange-600 dark:text-orange-400" },
+  Oils:       { border: "border-amber-400",  text: "text-amber-700 dark:text-amber-400"   },
+  Other:      { border: "border-gray-400",   text: "text-gray-500 dark:text-gray-400"     },
+};
+
+function normalizeCategory(raw) {
+  const found = CATEGORY_ORDER.find(
+    (c) => c.toLowerCase() === (raw ?? "").toLowerCase()
+  );
+  return found ?? "Other";
 }
 
 // ─── ADD INGREDIENT MODAL ─────────────────────────────────────────────────────
@@ -574,6 +594,37 @@ export default function GroceryList() {
     }
   }
 
+  // ── Toggle always-at-home ──
+  async function handleToggleHome(itemId) {
+    // Optimistic flip
+    setItems((prev) =>
+      prev.map((it) =>
+        it.item_id === itemId
+          ? { ...it, always_at_home: !it.always_at_home }
+          : it
+      )
+    );
+    try {
+      const result = await groceryService.toggleAlwaysAtHome(itemId);
+      setTotalPrice(result.new_total);
+      setWithinBudget(result.new_total <= budget);
+    } catch {
+      await loadList(); // revert on failure
+    }
+  }
+
+  // ── Group items by category ──
+  const groupedItems = useMemo(() => {
+    const groups = Object.fromEntries(CATEGORY_ORDER.map((c) => [c, []]));
+    for (const item of items) {
+      const cat = item.is_custom
+        ? "Other"
+        : normalizeCategory(item.category);
+      groups[cat].push(item);
+    }
+    return groups;
+  }, [items]);
+
   const totalItems   = items.length;
   const checkedCount = checkedItems.size;
   const progressPct  = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
@@ -710,7 +761,7 @@ export default function GroceryList() {
         </div>
       </div>
 
-      {/* ── Items list ── */}
+      {/* ── Items list (grouped by category) ── */}
       <main className="px-4 pt-4 flex flex-col gap-2">
 
         {items.length === 0 ? (
@@ -726,135 +777,192 @@ export default function GroceryList() {
             </Button>
           </div>
         ) : (
-          <div className="bg-white dark:bg-[#1a2e1d] rounded-xl overflow-hidden shadow-sm border border-gray-50 dark:border-gray-800">
-            {items.map((item, index) => {
-              const isChecked  = checkedItems.has(item.item_id);
-              const isEditing  = editingItemId === item.item_id;
-              const isSaving   = savingItemId === item.item_id;
-              const isDeleting = deletingItemId === item.item_id;
+          <>
+            {CATEGORY_ORDER.map((category) => {
+              const catItems = groupedItems[category] ?? [];
+              if (catItems.length === 0) return null;
+              const style = CATEGORY_STYLES[category];
 
               return (
-                <div
-                  key={item.item_id}
-                  className={[
-                    "flex items-center gap-3 px-4 py-3 transition-all",
-                    index < items.length - 1
-                      ? "border-b border-gray-50 dark:border-gray-800"
-                      : "",
-                    isChecked ? "bg-primary/5" : "",
-                    isDeleting ? "opacity-40 pointer-events-none" : "",
-                  ].join(" ")}
-                >
-                  {/* Checkbox */}
-                  <button
-                    type="button"
-                    onClick={() => toggleCheck(item.item_id)}
-                    aria-label={`${isChecked ? "Uncheck" : "Check"} ${item.name}`}
+                <div key={category}>
+                  {/* ── Category header ── */}
+                  <div
                     className={[
-                      "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                      isChecked
-                        ? "bg-primary border-primary"
-                        : "border-gray-300 dark:border-gray-600",
+                      "flex items-center gap-2 px-3 py-1.5 mb-1",
+                      "border-l-4 rounded-r-lg",
+                      "bg-gray-50 dark:bg-white/5",
+                      style.border,
                     ].join(" ")}
                   >
-                    {isChecked && (
-                      <span className="material-symbols-outlined text-white text-sm">
-                        check
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Name + unit price */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <p
-                        className={[
-                          "font-semibold text-sm truncate",
-                          isChecked
-                            ? "line-through text-gray-400"
-                            : "text-[#111812] dark:text-white",
-                        ].join(" ")}
-                      >
-                        {item.name}
-                      </p>
-                      {item.is_custom && (
-                        <span className="shrink-0 text-[10px] bg-primary/10 text-[#618968] px-1.5 py-0.5 rounded-full font-bold">
-                          custom
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#618968] mt-0.5">
-                      {item.unit} · {formatFCFA(item.unit_price)} each
-                    </p>
-                  </div>
-
-                  {/* Quantity — click to edit inline */}
-                  <div className="shrink-0">
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={editingQty}
-                        min="0.1"
-                        step="0.1"
-                        autoFocus
-                        onChange={(e) => setEditingQty(e.target.value)}
-                        onBlur={() => saveEdit(item.item_id)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && saveEdit(item.item_id)
-                        }
-                        className="w-16 h-8 text-center text-sm font-bold rounded-lg border-2 border-primary bg-white dark:bg-white/10 text-[#111812] dark:text-white focus:outline-none"
-                        aria-label="Edit quantity"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => !isChecked && startEdit(item)}
-                        disabled={isChecked || isSaving}
-                        title={isChecked ? "" : "Tap to edit quantity"}
-                        className={[
-                          "min-w-[3rem] h-8 px-2 rounded-lg text-sm font-bold transition-colors",
-                          isChecked
-                            ? "text-gray-400 cursor-default"
-                            : "text-[#111812] dark:text-white hover:bg-primary/10 active:bg-primary/20",
-                          isSaving ? "opacity-50" : "",
-                        ].join(" ")}
-                      >
-                        {isSaving ? "…" : `×${item.quantity}`}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Item total */}
-                  <p
-                    className={[
-                      "text-sm font-bold shrink-0 w-[4.5rem] text-right",
-                      isChecked ? "text-gray-400" : "text-[#111812] dark:text-white",
-                    ].join(" ")}
-                  >
-                    {formatFCFA(item.total_price)}
-                  </p>
-
-                  {/* Delete */}
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(item.item_id)}
-                    aria-label={`Remove ${item.name}`}
-                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0"
-                  >
-                    <span className="material-symbols-outlined text-sm text-gray-300 hover:text-red-500 transition-colors">
-                      delete
+                    <span className={`text-xs font-bold uppercase tracking-widest ${style.text}`}>
+                      {category}
                     </span>
-                  </button>
+                    <span className="ml-auto text-xs text-[#618968]/50">
+                      {catItems.length} item{catItems.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {/* ── Items in this category ── */}
+                  <div className="bg-white dark:bg-[#1a2e1d] rounded-xl overflow-hidden shadow-sm border border-gray-50 dark:border-gray-800 mb-3">
+                    {catItems.map((item, index) => {
+                      const isChecked  = checkedItems.has(item.item_id);
+                      const isEditing  = editingItemId === item.item_id;
+                      const isSaving   = savingItemId === item.item_id;
+                      const isDeleting = deletingItemId === item.item_id;
+                      const isAtHome   = item.always_at_home;
+
+                      return (
+                        <div
+                          key={item.item_id}
+                          className={[
+                            "flex items-center gap-2 px-4 py-3 transition-all",
+                            index < catItems.length - 1
+                              ? "border-b border-gray-50 dark:border-gray-800"
+                              : "",
+                            isAtHome                   ? "opacity-50"              : "",
+                            isChecked && !isAtHome     ? "bg-primary/5"            : "",
+                            isDeleting                 ? "opacity-40 pointer-events-none" : "",
+                          ].join(" ")}
+                        >
+                          {/* Checkbox */}
+                          <button
+                            type="button"
+                            onClick={() => toggleCheck(item.item_id)}
+                            aria-label={`${isChecked ? "Uncheck" : "Check"} ${item.name}`}
+                            className={[
+                              "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                              isChecked
+                                ? "bg-primary border-primary"
+                                : "border-gray-300 dark:border-gray-600",
+                            ].join(" ")}
+                          >
+                            {isChecked && (
+                              <span className="material-symbols-outlined text-white text-sm">check</span>
+                            )}
+                          </button>
+
+                          {/* Name + labels */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                              <p
+                                className={[
+                                  "font-semibold text-sm truncate",
+                                  isChecked || isAtHome
+                                    ? "line-through text-gray-400"
+                                    : "text-[#111812] dark:text-white",
+                                ].join(" ")}
+                              >
+                                {item.name}
+                              </p>
+                              {item.is_custom && (
+                                <span className="shrink-0 text-[10px] bg-primary/10 text-[#618968] px-1.5 py-0.5 rounded-full font-bold">
+                                  custom
+                                </span>
+                              )}
+                              {isAtHome && (
+                                <span className="shrink-0 text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-bold">
+                                  At home
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-[#618968] mt-0.5">
+                              {item.unit} · {formatFCFA(item.unit_price)} each
+                            </p>
+                          </div>
+
+                          {/* Quantity — tap to edit inline */}
+                          <div className="shrink-0">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                value={editingQty}
+                                min="0.1"
+                                step="0.1"
+                                autoFocus
+                                onChange={(e) => setEditingQty(e.target.value)}
+                                onBlur={() => saveEdit(item.item_id)}
+                                onKeyDown={(e) =>
+                                  e.key === "Enter" && saveEdit(item.item_id)
+                                }
+                                className="w-16 h-8 text-center text-sm font-bold rounded-lg border-2 border-primary bg-white dark:bg-white/10 text-[#111812] dark:text-white focus:outline-none"
+                                aria-label="Edit quantity"
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => !isChecked && !isAtHome && startEdit(item)}
+                                disabled={isChecked || isAtHome || isSaving}
+                                title={isChecked || isAtHome ? "" : "Tap to edit quantity"}
+                                className={[
+                                  "min-w-[3rem] h-8 px-2 rounded-lg text-sm font-bold transition-colors",
+                                  isChecked || isAtHome
+                                    ? "text-gray-400 cursor-default"
+                                    : "text-[#111812] dark:text-white hover:bg-primary/10 active:bg-primary/20",
+                                  isSaving ? "opacity-50" : "",
+                                ].join(" ")}
+                              >
+                                {isSaving ? "…" : `×${item.quantity}`}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Item total — struck through when at home */}
+                          <p
+                            className={[
+                              "text-sm font-bold shrink-0 w-[4.5rem] text-right",
+                              isAtHome
+                                ? "line-through text-gray-400"
+                                : isChecked
+                                  ? "text-gray-400"
+                                  : "text-[#111812] dark:text-white",
+                            ].join(" ")}
+                          >
+                            {formatFCFA(item.total_price)}
+                          </p>
+
+                          {/* Always-at-home toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleHome(item.item_id)}
+                            aria-label={isAtHome ? "Mark as needed" : "Mark as always at home"}
+                            title={isAtHome ? "I need to buy this" : "I always have this at home"}
+                            className={[
+                              "w-7 h-7 flex items-center justify-center rounded-full transition-colors shrink-0",
+                              isAtHome
+                                ? "text-primary bg-primary/10"
+                                : "text-gray-300 hover:text-[#618968] hover:bg-gray-100 dark:hover:bg-white/10",
+                            ].join(" ")}
+                          >
+                            <span className="material-symbols-outlined text-sm">home</span>
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(item.item_id)}
+                            aria-label={`Remove ${item.name}`}
+                            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0"
+                          >
+                            <span className="material-symbols-outlined text-sm text-gray-300 hover:text-red-500 transition-colors">
+                              delete
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
-          </div>
+          </>
         )}
 
-        {/* Hint for quantity editing */}
+        {/* Hint */}
         {items.length > 0 && (
           <p className="text-xs text-[#618968]/60 text-center pt-1">
-            Tap a quantity (×n) to edit it
+            Tap ×n to edit quantity · tap{" "}
+            <span className="material-symbols-outlined text-[11px] align-middle">home</span>{" "}
+            to mark as always at home
           </p>
         )}
       </main>

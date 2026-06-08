@@ -74,6 +74,17 @@ const groceryService = {
   },
 
   /**
+   * Toggle the "always at home" flag on a single grocery list item.
+   * The server flips the boolean, recalculates the list total,
+   * and returns the new state.
+   * @param {number} itemId
+   */
+  async toggleAlwaysAtHome(itemId) {
+    const res = await api.patch(`/grocery/item/${itemId}/toggle-home`);
+    return res.data;
+  },
+
+  /**
    * Search the ingredients database by name.
    * Returns up to 10 matching ingredients with unit and price.
    * @param {string} query — minimum 2 characters

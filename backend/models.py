@@ -644,6 +644,15 @@ class GroceryListItem(db.Model):
         default=False
     )
 
+    # When True, item is excluded from the grocery total.
+    # server_default ensures existing rows get False on migration.
+    always_at_home = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=db.false(),
+    )
+
     ingredient = db.relationship(
         "Ingredient",
         lazy=True

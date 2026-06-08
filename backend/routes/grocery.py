@@ -15,14 +15,18 @@ grocery_bp = Blueprint("grocery", __name__)
 # HELPER: RECALCULATE GROCERY LIST TOTAL
 # ─────────────────────────────────────────
 def recalculate_total(grocery_list):
-    # Expire the relationship cache so SQLAlchemy re-queries
-    # the items from the database instead of using stale memory.
-    # Without this, bulk deletes are invisible to the ORM cache.
+    # Expire cache so SQLAlchemy re-queries from DB (bulk deletes
+    # are otherwise invisible to the ORM).
     db.session.expire(grocery_list)
 
+    # Exclude items marked as always_at_home — user already has them.
     grocery_list.total_price = round(
-        sum(item.total_price for item in grocery_list.items),
-        2
+        sum(
+            item.total_price
+            for item in grocery_list.items
+            if not item.always_at_home
+        ),
+        2,
     )
 
     db.session.commit()
@@ -39,17 +43,21 @@ def serialize_items(grocery_list):
     """
     return [
         {
-            "item_id":     item.item_id,
-            # Use ingredient.name for db ingredients, custom_name for user additions
+            "item_id":        item.item_id,
             "name":
                 item.ingredient.name
                 if item.ingredient
                 else item.custom_name,
-            "unit":        item.unit,
-            "unit_price":  item.unit_price,
-            "quantity":    item.quantity,
-            "total_price": item.total_price,
-            "is_custom":   item.is_custom,
+            "unit":           item.unit,
+            "unit_price":     item.unit_price,
+            "quantity":       item.quantity,
+            "total_price":    item.total_price,
+            "is_custom":      item.is_custom,
+            "always_at_home": item.always_at_home,
+            "category":
+                item.ingredient.category
+                if item.ingredient
+                else "Other",
         }
         for item in grocery_list.items
     ]
@@ -321,6 +329,34 @@ def remove_item(item_id):
 
     return jsonify({
         "message": "Item removed"
+    }), 200
+
+
+# ─────────────────────────────────────────
+# TOGGLE "ALWAYS AT HOME"
+# PATCH /api/grocery/item/<item_id>/toggle-home
+#
+# Flips always_at_home on a single item.
+# Recalculates the list total after the flip
+# so excluded items are not counted.
+# ─────────────────────────────────────────
+@grocery_bp.route("/item/<int:item_id>/toggle-home", methods=["PATCH"])
+def toggle_always_at_home(item_id):
+
+    item = GroceryListItem.query.get(item_id)
+
+    if not item:
+        return jsonify({"error": "Item not found"}), 404
+
+    item.always_at_home = not item.always_at_home
+    db.session.commit()
+
+    recalculate_total(item.grocery_list)
+
+    return jsonify({
+        "item_id":        item.item_id,
+        "always_at_home": item.always_at_home,
+        "new_total":      item.grocery_list.total_price,
     }), 200
 
 
