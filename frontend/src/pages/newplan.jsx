@@ -69,7 +69,9 @@ export default function NewPlan() {
 
     let end_date;
     if (duration === "Daily") {
-      end_date = start_date;
+      const nextDay = new Date(today);
+      nextDay.setDate(nextDay.getDate() + 1);
+      end_date = nextDay.toISOString().split("T")[0];
     } else {
       const endDate = new Date(today);
       endDate.setDate(endDate.getDate() + 6);

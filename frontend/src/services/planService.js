@@ -9,14 +9,12 @@ import api from "./api";
 const planService = {
 
   async createPlan(planData) {
-    const response = await api.post("/meal_plan/", {
+    const response = await api.post("/meal_plan/generate", {
       user_id:           planData.user_id,
       start_date:        planData.start_date,
       end_date:          planData.end_date,
       total_budget:      planData.budget,
-      servings:          planData.servings,
       cooking_frequency: planData.cooking_frequency || "every_2_days",
-      prompt:            planData.prompt || "",
     });
     return response.data;
   },
