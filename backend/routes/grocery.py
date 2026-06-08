@@ -266,43 +266,44 @@ def get_saved_grocery_list(plan_id):
 
 
 # ─────────────────────────────────────────
-# UPDATE ITEM QUANTITY
+# UPDATE ITEM (quantity and/or unit_price)
 # PATCH /api/grocery/item/<item_id>
 # ─────────────────────────────────────────
 @grocery_bp.route("/item/<int:item_id>", methods=["PATCH"])
-def update_item_quantity(item_id):
+def update_item(item_id):
 
     item = GroceryListItem.query.get(item_id)
 
     if not item:
-        return jsonify({
-            "error": "Item not found"
-        }), 404
+        return jsonify({"error": "Item not found"}), 404
 
     data = request.get_json()
 
-    quantity = data.get("quantity")
+    if "quantity" in data:
+        val = float(data["quantity"])
+        if val <= 0:
+            return jsonify({"error": "Quantity must be greater than 0"}), 400
+        item.quantity = val
 
-    if quantity is None or quantity <= 0:
+    if "unit_price" in data:
+        val = float(data["unit_price"])
+        if val <= 0:
+            return jsonify({"error": "Unit price must be greater than 0"}), 400
+        item.unit_price = val
 
-        return jsonify({
-            "error": "Quantity must be greater than 0"
-        }), 400
-
-    item.quantity = quantity
-
-    item.total_price = round(
-        quantity * item.unit_price,
-        2
-    )
+    item.total_price = round(item.quantity * item.unit_price, 2)
 
     db.session.commit()
 
     recalculate_total(item.grocery_list)
 
     return jsonify({
-        "message": "Quantity updated",
-        "item_id": item.item_id
+        "success":        True,
+        "item_id":        item.item_id,
+        "quantity":       item.quantity,
+        "unit_price":     item.unit_price,
+        "total_price":    item.total_price,
+        "new_list_total": item.grocery_list.total_price,
     }), 200
 
 
