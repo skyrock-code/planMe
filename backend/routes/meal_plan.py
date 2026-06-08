@@ -1,7 +1,11 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from extensions import db
-from models import MealPlan, Meal, MealPlanMeal
+from models import (
+    MealPlan, Meal, MealPlanMeal,
+    User,
+)
+from services.meal_filter_service import MealFilterService
 
 meal_plan_bp = Blueprint('meal_plan', __name__)
 
@@ -261,3 +265,105 @@ def swap_meal():
         "new_meal_name": new_meal.meal_name,
         "start_date":   str(start_date),
     }), 200
+
+
+# ─────────────────────────────────────────
+# GENERATE MEAL PLAN AUTOMATICALLY
+# POST /api/meal_plan/generate
+#
+# Delegates filtering and schedule generation
+# to MealFilterService, then persists the
+# result and builds the grocery list.
+#
+# Request body:
+# {
+#   "user_id":           int,
+#   "start_date":        "YYYY-MM-DD",
+#   "end_date":          "YYYY-MM-DD",
+#   "total_budget":      float,
+#   "cooking_frequency": str  (optional, defaults to user profile value)
+# }
+# ─────────────────────────────────────────
+@meal_plan_bp.route('/generate', methods=['POST'])
+def generate_plan():
+    data = request.get_json()
+
+    required = ['user_id', 'start_date', 'end_date', 'total_budget']
+    if not all(data.get(f) is not None for f in required):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        start_date = datetime.strptime(data['start_date'], "%Y-%m-%d").date()
+        end_date   = datetime.strptime(data['end_date'],   "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+
+    if end_date <= start_date:
+        return jsonify({"error": "end_date must be after start_date"}), 400
+
+    user = User.query.get(data['user_id'])
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    cooking_frequency = (
+        data.get('cooking_frequency')
+        or user.cooking_frequency
+        or 'every_2_days'
+    )
+    total_budget = float(data['total_budget'])
+
+    service = MealFilterService()
+
+    # Validate that at least one eligible meal exists before creating a plan
+    if not service.get_eligible_meals(user.user_id):
+        return jsonify({
+            "error": "No suitable meals found matching your allergies and dietary preferences"
+        }), 400
+
+    # Delegate schedule generation to the service
+    schedule = service.generate_weekly_plan(
+        user_id           = user.user_id,
+        budget            = total_budget,
+        cooking_frequency = cooking_frequency,
+        start_date        = start_date,
+        end_date          = end_date,
+    )
+
+    if not schedule:
+        return jsonify({
+            "error": "Could not schedule any meals. Try a higher budget or fewer diet restrictions."
+        }), 400
+
+    # ── Persist the plan ──────────────────────────────────────────────
+    plan = MealPlan(
+        user_id           = user.user_id,
+        start_date        = start_date,
+        end_date          = end_date,
+        total_budget      = total_budget,
+        cooking_frequency = cooking_frequency,
+    )
+    db.session.add(plan)
+    db.session.flush()
+
+    for slot in schedule:
+        db.session.add(MealPlanMeal(
+            plan_id       = plan.plan_id,
+            meal_id       = slot['meal_id'],
+            start_date    = slot['date'],
+            duration_days = slot['duration_days'],
+        ))
+
+    db.session.commit()
+
+    return jsonify({
+        "message":        "Meal plan generated successfully",
+        "plan_id":        plan.plan_id,
+        "meals_assigned": len(schedule),
+        "total_budget":   total_budget,
+        "grocery_url":    f"/api/grocery/{plan.plan_id}",
+        "filters_applied": {
+            "allergens_excluded": sorted({ua.allergen.lower() for ua in user.allergies}),
+            "diet_preferences":   sorted({ud.diet_type.lower() for ud in user.diets}),
+            "cooking_frequency":  cooking_frequency,
+        },
+    }), 201
