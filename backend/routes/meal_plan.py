@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from extensions import db
 from models import (
     MealPlan, Meal, MealPlanMeal,
-    User, GroceryList, GroceryListItem,
+    User,
 )
 from services.meal_filter_service import MealFilterService
 
@@ -353,55 +353,14 @@ def generate_plan():
             duration_days = slot['duration_days'],
         ))
 
-    # ── Build grocery list from the schedule ──────────────────────────
-    grocery_list = GroceryList(plan_id=plan.plan_id, total_price=0.0)
-    db.session.add(grocery_list)
-    db.session.flush()
-
-    grocery_map = {}
-    for slot in schedule:
-        meal = Meal.query.get(slot['meal_id'])
-        for mi in meal.ingredients:
-            ing  = mi.ingredient
-            qty  = round(mi.quantity * slot['duration_days'], 3)
-            cost = round(qty * ing.unit_price_xaf, 2)
-            if ing.id in grocery_map:
-                grocery_map[ing.id]['quantity']    += qty
-                grocery_map[ing.id]['total_price'] += cost
-            else:
-                grocery_map[ing.id] = {
-                    'quantity':    qty,
-                    'unit':        ing.market_unit,
-                    'unit_price':  ing.unit_price_xaf,
-                    'total_price': cost,
-                }
-
-    total_cost = 0.0
-    for ing_id, item in grocery_map.items():
-        item['quantity']    = round(item['quantity'],    3)
-        item['total_price'] = round(item['total_price'], 2)
-        total_cost += item['total_price']
-        db.session.add(GroceryListItem(
-            list_id       = grocery_list.list_id,
-            ingredient_id = ing_id,
-            quantity      = item['quantity'],
-            unit          = item['unit'],
-            unit_price    = item['unit_price'],
-            total_price   = item['total_price'],
-            is_custom     = False,
-        ))
-
-    grocery_list.total_price = round(total_cost, 2)
     db.session.commit()
 
     return jsonify({
-        "message":         "Meal plan generated successfully",
-        "plan_id":         plan.plan_id,
-        "meals_assigned":  len(schedule),
-        "estimated_cost":  round(total_cost, 2),
-        "total_budget":    total_budget,
-        "within_budget":   round(total_cost, 2) <= total_budget,
-        "grocery_list_id": grocery_list.list_id,
+        "message":        "Meal plan generated successfully",
+        "plan_id":        plan.plan_id,
+        "meals_assigned": len(schedule),
+        "total_budget":   total_budget,
+        "grocery_url":    f"/api/grocery/{plan.plan_id}",
         "filters_applied": {
             "allergens_excluded": sorted({ua.allergen.lower() for ua in user.allergies}),
             "diet_preferences":   sorted({ud.diet_type.lower() for ud in user.diets}),
