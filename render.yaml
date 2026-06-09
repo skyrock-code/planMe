@@ -1,0 +1,38 @@
+services:
+  # ── Backend Flask API ────────────────────────────────
+  - type: web
+    name: planme-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && flask db upgrade
+    startCommand: gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2
+    disk:
+      name: planme-db
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////data/planMe.db
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: HF_TOKEN
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: FLASK_ENV
+        value: production
+
+  # ── Frontend React App ───────────────────────────────
+  - type: web
+    name: planme-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
