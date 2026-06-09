@@ -381,85 +381,80 @@ def add_custom_ingredient(list_id):
 
     data = request.get_json()
 
-    required_fields = [
-        "name",
-        "unit_price",
-        "quantity"
-    ]
+    saved_to_profile = False
 
-    if not all(data.get(f) for f in required_fields):
+    # ── Path A: DB ingredient (ingredient_id + quantity) ─────────────────
+    if data.get("ingredient_id"):
+        from models import Ingredient as IngModel
+        ing = IngModel.query.get(int(data["ingredient_id"]))
+        if not ing:
+            return jsonify({"error": "Ingredient not found"}), 404
+        if not data.get("quantity") or float(data["quantity"]) <= 0:
+            return jsonify({"error": "quantity is required and must be > 0"}), 400
 
-        return jsonify({
-            "error":
-                "name, unit_price and quantity are required"
-        }), 400
+        quantity    = float(data["quantity"])
+        unit_price  = ing.unit_price_xaf
+        total_price = round(quantity * unit_price, 2)
 
-    # Convert to float explicitly — JSON values may arrive as strings
-    quantity    = float(data["quantity"])
-    unit_price  = float(data["unit_price"])
-    total_price = round(quantity * unit_price, 2)
+        item = GroceryListItem(
+            list_id       = list_id,
+            ingredient_id = ing.id,
+            custom_name   = None,
+            quantity      = quantity,
+            unit          = ing.market_unit,
+            unit_price    = unit_price,
+            total_price   = total_price,
+            is_custom     = False,
+        )
 
-    # Add custom item
-    item = GroceryListItem(
+    # ── Path B: Custom item (name + unit_price + quantity) ────────────────
+    else:
+        required_fields = ["name", "unit_price", "quantity"]
+        if not all(data.get(f) for f in required_fields):
+            return jsonify({
+                "error": "name, unit_price and quantity are required"
+            }), 400
 
-        list_id=list_id,
+        # Convert to float explicitly — JSON values may arrive as strings
+        quantity    = float(data["quantity"])
+        unit_price  = float(data["unit_price"])
+        total_price = round(quantity * unit_price, 2)
 
-        ingredient_id=None,
+        item = GroceryListItem(
+            list_id       = list_id,
+            ingredient_id = None,
+            custom_name   = data["name"],
+            quantity      = quantity,
+            unit          = data.get("unit"),
+            unit_price    = unit_price,
+            total_price   = total_price,
+            is_custom     = True,
+        )
 
-        custom_name=data["name"],
-
-        quantity=quantity,
-
-        unit=data.get("unit"),
-
-        unit_price=unit_price,
-
-        total_price=total_price,
-
-        is_custom=True,
-    )
+        # Save to user's personal ingredients (custom path only)
+        if data.get("save_to_profile") and data.get("user_id"):
+            existing = UserIngredient.query.filter_by(
+                user_id         = data["user_id"],
+                ingredient_name = data["name"],
+            ).first()
+            if not existing:
+                db.session.add(UserIngredient(
+                    user_id         = data["user_id"],
+                    ingredient_name = data["name"],
+                    unit            = data.get("unit"),
+                    estimated_price = unit_price,
+                ))
+                saved_to_profile = True
 
     db.session.add(item)
     db.session.commit()
 
     recalculate_total(grocery_list)
 
-    # Save to user's personal ingredients
-    saved_to_profile = False
-
-    if data.get("save_to_profile") and data.get("user_id"):
-
-        existing = UserIngredient.query.filter_by(
-            user_id=data["user_id"],
-            ingredient_name=data["name"]
-        ).first()
-
-        if not existing:
-
-            saved = UserIngredient(
-
-                user_id=data["user_id"],
-
-                ingredient_name=data["name"],
-
-                unit=data.get("unit"),
-
-                estimated_price=unit_price,
-            )
-
-            db.session.add(saved)
-            db.session.commit()
-
-            saved_to_profile = True
-
     return jsonify({
-
-        "message": "Custom ingredient added",
-
-        "item_id": item.item_id,
-
+        "message":          "Ingredient added",
+        "item_id":          item.item_id,
         "saved_to_profile": saved_to_profile,
-
     }), 201
 
 

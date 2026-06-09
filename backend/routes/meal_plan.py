@@ -180,6 +180,9 @@ def get_plan_meals(plan_id):
     # can access `cooking_frequency` alongside the assigned meals.
     return jsonify({
         "plan_id":           plan.plan_id,
+        "start_date":        str(plan.start_date),
+        "end_date":          str(plan.end_date),
+        "total_budget":      plan.total_budget,
         "cooking_frequency": plan.cooking_frequency,
         "meals":             result
     }), 200
