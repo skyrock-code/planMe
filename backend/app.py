@@ -14,6 +14,7 @@ def create_app():
     CORS(app,
          origins=[
              app.config.get('FRONTEND_URL', 'http://localhost:5173'),
+             'https://planme-frontend.onrender.com',
              'http://localhost:5173',
              'http://localhost:5174',
          ],
