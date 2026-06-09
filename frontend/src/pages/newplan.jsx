@@ -14,15 +14,19 @@ import planService from "../services/planService";
 import TopAppBar from "../components/layout/TopAppBar";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
-import Chip from "../components/ui/Chip";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
-/**
- * Suggested hashtag chips shown below the meal preference textarea.
- * Users can tap these to append suggestions to their prompt.
- */
-const SUGGESTION_CHIPS = ["#Healthy", "#Traditional", "#FastPrep", "#Budget", "#Spicy"];
+const PREFERENCE_CHIPS = [
+  { label: "#Healthy",      value: "healthy" },
+  { label: "#Traditional",  value: "traditional" },
+  { label: "#FastPrep",     value: "fast preparation" },
+  { label: "#Budget",       value: "budget friendly" },
+  { label: "#Spicy",        value: "spicy" },
+  { label: "#LightMeals",   value: "light meals" },
+  { label: "#HighProtein",  value: "high protein" },
+  { label: "#Vegetarian",   value: "vegetarian" },
+];
 
 /**
  * Plan duration options for the segmented toggle.
@@ -52,11 +56,11 @@ export default function NewPlan() {
   const { user } = useAuth();
 
   // ── Form state ──
-  const [duration, setDuration]   = useState("Weekly");
-  const [budget, setBudget]       = useState("");
-  const [servings, setServings]   = useState("1");
-  const [frequency, setFrequency] = useState("every_2_days");
-  const [prompt, setPrompt]       = useState("");
+  const [duration, setDuration]       = useState("Weekly");
+  const [budget, setBudget]           = useState("");
+  const [servings, setServings]       = useState("1");
+  const [frequency, setFrequency]     = useState("every_2_days");
+  const [selectedPrefs, setSelectedPrefs] = useState([]);
 
   // ── API state ──
   const [error, setError] = useState("");
@@ -81,14 +85,9 @@ export default function NewPlan() {
     return { start_date, end_date };
   }
 
-  /**
-   * Appends a hashtag suggestion to the prompt textarea.
-   * @param {string} tag - The hashtag string e.g. "#Healthy"
-   */
-  function handleChipPress(tag) {
-    // Add a space before the tag if the prompt isn't empty
-    setPrompt((prev) =>
-      prev.trim() === "" ? tag : `${prev.trim()} ${tag}`
+  function handleChipToggle(value) {
+    setSelectedPrefs((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
     );
   }
 
@@ -113,6 +112,11 @@ export default function NewPlan() {
       setLoading(true);
 
       const { start_date, end_date } = getPlanDates(duration);
+
+      const prompt =
+        selectedPrefs.length > 0
+          ? `User prefers: ${selectedPrefs.join(", ")}`
+          : "no specific preferences";
 
       const planData = {
         user_id: user.user_id,
@@ -230,40 +234,33 @@ export default function NewPlan() {
           </p>
         </div>
 
-        {/* ── Meal Preference prompt ── */}
-        <div className="pt-8">
-          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-3">
+        {/* ── Meal Preferences chips ── */}
+        <div className="pt-8 pb-8">
+          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
             Meal Preferences
           </h3>
-
-          <Input
-            placeholder="I want something with Ndolé or Achu for lunch. Keep it healthy for dinner with some fresh fruit."
-            type="textarea"
-            helper="What do you feel like eating?"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={5}
-          />
-
-          {/* Hashtag suggestion chips */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {SUGGESTION_CHIPS.map((tag) => (
-              <Chip
-                key={tag}
-                label={tag}
-                variant="hashtag"
-                onToggle={() => handleChipPress(tag)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Decorative banner ── */}
-        <div className="mt-12 mb-8">
-          <div className="w-full h-32 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
-            <p className="text-[#111812] dark:text-white text-sm font-medium italic text-center px-6">
-              "Powered by Cameroonian AI to match your local market prices."
-            </p>
+          <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-4">
+            Select what applies to you this week
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PREFERENCE_CHIPS.map((chip) => {
+              const selected = selectedPrefs.includes(chip.value);
+              return (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => handleChipToggle(chip.value)}
+                  className={[
+                    "px-4 py-2 rounded-full text-sm font-semibold border transition-all",
+                    selected
+                      ? "bg-primary text-[#111812] border-primary"
+                      : "bg-transparent text-[#618968] border-[#dbe6dd] dark:border-white/10 dark:text-gray-300",
+                  ].join(" ")}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
