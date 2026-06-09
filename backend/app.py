@@ -45,7 +45,7 @@ def create_app():
         }), 200
     # ===========================================
 
-    CORS(app,
+        CORS(app,
          origins=[
              app.config.get('FRONTEND_URL', 'http://localhost:5173'),
              'http://localhost:5173',
@@ -53,8 +53,17 @@ def create_app():
              'https://planme-frontend.onrender.com',
          ],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization"],
+         allow_headers=["Content-Type", "Authorization", "Accept"],
          supports_credentials=True)
+
+    # ADD THIS AFTER CORS - handles OPTIONS preflight requests
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', 'https://planme-frontend.onrender.com')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
     db.init_app(app)
     migrate.init_app(app, db)
