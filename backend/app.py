@@ -1,4 +1,6 @@
-from flask import Flask
+import os  # ADD THIS AT THE TOP
+from flask import Flask, jsonify  # ADD jsonify
+from datetime import datetime  # ADD datetime
 from flask_cors import CORS
 from config import Config
 from extensions import db
@@ -11,12 +13,44 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # ========== ADD THIS DATABASE CONFIGURATION SECTION ==========
+    # Use PostgreSQL on Render, SQLite locally
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        # Render uses postgres:// but SQLAlchemy requires postgresql://
+        app.config['SQLALCHEMY_DATABASE_URI'] = database_url.replace('postgres://', 'postgresql://')
+        print(f"Using PostgreSQL database")
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///planme.db'
+        print(f"Using SQLite database")
+    
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # =============================================================
+
+    # ========== ADD ROOT HEALTH ROUTES ==========
+    @app.route('/', methods=['GET'])
+    def home():
+        return jsonify({
+            "message": "PlanMe API is running!",
+            "status": "healthy",
+            "version": "1.0.0",
+            "database": "PostgreSQL" if database_url else "SQLite"
+        }), 200
+
+    @app.route('/ping', methods=['GET'])
+    def ping():
+        return jsonify({
+            "status": "alive",
+            "timestamp": datetime.utcnow().isoformat()
+        }), 200
+    # ===========================================
+
     CORS(app,
          origins=[
              app.config.get('FRONTEND_URL', 'http://localhost:5173'),
              'http://localhost:5173',
              'http://localhost:5174',
-             'https://planme-frontend.onrender.com',  # Add production frontend
+             'https://planme-frontend.onrender.com',
          ],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization"],
@@ -51,9 +85,9 @@ def create_app():
     from routes.grocery     import grocery_bp
     from routes.ingredients import ingredients_bp
     from routes.ai          import ai_bp
-    from routes.health      import health_bp  # ADD THIS
+    from routes.health      import health_bp
 
-    app.register_blueprint(health_bp,         url_prefix="/")  # ADD THIS - root route
+    app.register_blueprint(health_bp,         url_prefix="/")
     app.register_blueprint(auth_bp,        url_prefix="/api/auth")
     app.register_blueprint(meals_bp,       url_prefix="/api/meals")
     app.register_blueprint(meal_plan_bp,   url_prefix="/api/meal_plan")
