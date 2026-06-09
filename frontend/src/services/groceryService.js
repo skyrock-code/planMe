@@ -40,11 +40,14 @@ const groceryService = {
   },
 
   /**
-   * Update quantity and/or unit_price for a single grocery list item.
-   * Pass { quantity } or { unit_price } or both.
-   * Returns updated item values and the new list total.
+   * Update a single grocery list item.
+   * Pass exactly one of:
+   *   { quantity }    — recalculates total_price server-side
+   *   { total_price } — recalculates quantity server-side
+   * unit_price is never changed here; the server reads it from the DB.
+   * Returns { item_id, quantity, total_price, list_total }.
    * @param {number} itemId
-   * @param {{ quantity?: number, unit_price?: number }} updates
+   * @param {{ quantity?: number, total_price?: number }} updates
    */
   async updateItem(itemId, updates) {
     const res = await api.patch(`/grocery/item/${itemId}`, updates);
