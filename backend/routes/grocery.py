@@ -266,8 +266,12 @@ def get_saved_grocery_list(plan_id):
 
 
 # ─────────────────────────────────────────
-# UPDATE ITEM (quantity and/or unit_price)
+# UPDATE ITEM
 # PATCH /api/grocery/item/<item_id>
+#
+# Accepts either "quantity" or "total_price".
+# unit_price is always read from the stored
+# column — never derived or overwritten here.
 # ─────────────────────────────────────────
 @grocery_bp.route("/item/<int:item_id>", methods=["PATCH"])
 def update_item(item_id):
@@ -279,31 +283,31 @@ def update_item(item_id):
 
     data = request.get_json()
 
+    # Always read unit_price from the stored column
+    unit_price = item.unit_price
+
     if "quantity" in data:
-        val = float(data["quantity"])
-        if val <= 0:
+        new_qty = float(data["quantity"])
+        if new_qty <= 0:
             return jsonify({"error": "Quantity must be greater than 0"}), 400
-        item.quantity = val
+        item.quantity    = round(new_qty, 3)
+        item.total_price = round(new_qty * unit_price, 2)
 
-    if "unit_price" in data:
-        val = float(data["unit_price"])
-        if val <= 0:
-            return jsonify({"error": "Unit price must be greater than 0"}), 400
-        item.unit_price = val
-
-    item.total_price = round(item.quantity * item.unit_price, 2)
+    elif "total_price" in data:
+        new_total = float(data["total_price"])
+        if new_total <= 0:
+            return jsonify({"error": "Total price must be greater than 0"}), 400
+        item.total_price = round(new_total, 2)
+        item.quantity    = round(new_total / unit_price, 3) if unit_price > 0 else item.quantity
 
     db.session.commit()
-
     recalculate_total(item.grocery_list)
 
     return jsonify({
-        "success":        True,
-        "item_id":        item.item_id,
-        "quantity":       item.quantity,
-        "unit_price":     item.unit_price,
-        "total_price":    item.total_price,
-        "new_list_total": item.grocery_list.total_price,
+        "item_id":     item.item_id,
+        "quantity":    item.quantity,
+        "total_price": item.total_price,
+        "list_total":  item.grocery_list.total_price,
     }), 200
 
 

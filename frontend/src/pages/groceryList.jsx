@@ -320,30 +320,35 @@ export default function GroceryList() {
   const { user } = useAuth();
 
   // ── Plan ID ──
-  const [planId, setPlanId]       = useState(null);
+  const [planId, setPlanId]           = useState(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
 
-  // ── Data ──
+  // ── Server data ──
   const [items, setItems]               = useState([]);
   const [listId, setListId]             = useState(null);
   const [totalPrice, setTotalPrice]     = useState(0);
   const [budget, setBudget]             = useState(0);
-  const [withinBudget, setWithinBudget] = useState(true);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState("");
 
-  // ── UI ──
-  const [checkedItems, setCheckedItems]     = useState(new Set());
-  const [editingItem, setEditingItem]       = useState(null); // { id, field }
-  const [editValue, setEditValue]           = useState("");
-  const [savingItemId, setSavingItemId]     = useState(null);
+  // ── Editing: { id, field: 'quantity'|'total_price', value: string } ──
+  const [editingItem, setEditingItem]   = useState(null);
+
+  // ── Item actions ──
   const [deletingItemId, setDeletingItemId] = useState(null);
   const [showModal, setShowModal]           = useState(false);
+
+  // ── Bulk hide (view-only, no DB changes) ──
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems]     = useState(new Set());
+  const [hiddenItems, setHiddenItems]         = useState(new Set());
+
+  // ── Export ──
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [copySuccess, setCopySuccess]       = useState(false);
   const exportMenuRef                       = useRef(null);
 
-  // Close export dropdown on outside click
+  // Close export menu on outside click
   useEffect(() => {
     if (!showExportMenu) return;
     function onOutsideClick(e) {
@@ -392,7 +397,6 @@ export default function GroceryList() {
     setListId(data.list_id);
     setTotalPrice(data.total_price ?? 0);
     setBudget(data.budget ?? 0);
-    setWithinBudget(data.within_budget ?? true);
   }
 
   const loadList = useCallback(async () => {
@@ -422,6 +426,15 @@ export default function GroceryList() {
     if (planId) loadList();
   }, [loadList, planId]);
 
+  // Silent refresh — updates items + total without showing the loading spinner
+  async function silentRefresh() {
+    if (!planId) return;
+    try {
+      const data = await groceryService.fetchList(planId);
+      applyListData(data);
+    } catch {}
+  }
+
   async function handleRegenerate() {
     if (!planId) return;
     setLoading(true);
@@ -429,7 +442,10 @@ export default function GroceryList() {
     try {
       const data = await groceryService.generateList(planId);
       applyListData(data);
-      setCheckedItems(new Set());
+      // Regenerating restores all items — clear all view-only state
+      setHiddenItems(new Set());
+      setSelectedItems(new Set());
+      setIsSelectionMode(false);
       setEditingItem(null);
     } catch (err) {
       setError(err.response?.data?.error ?? "Regeneration failed.");
@@ -438,72 +454,53 @@ export default function GroceryList() {
     }
   }
 
-  async function refreshTotals() {
-    if (!planId) return;
-    try {
-      const data = await groceryService.fetchList(planId);
-      setTotalPrice(data.total_price ?? 0);
-      setWithinBudget(data.within_budget ?? true);
-    } catch {}
-  }
-
-  function toggleCheck(itemId) {
-    setCheckedItems((prev) => {
-      const next = new Set(prev);
-      next.has(itemId) ? next.delete(itemId) : next.add(itemId);
-      return next;
-    });
-  }
+  // ── Bidirectional editing ──
 
   function startEditing(itemId, field, currentValue) {
-    setEditingItem({ id: itemId, field });
-    setEditValue(String(currentValue));
+    setEditingItem({ id: itemId, field, value: String(currentValue) });
   }
 
   async function saveEdit(itemId, field) {
-    const val = parseFloat(editValue);
+    const value = parseFloat(editingItem?.value);
     setEditingItem(null);
-    if (!val || val <= 0) return;
-
-    const original = items.find((i) => i.item_id === itemId);
-    if (!original) return;
-
-    setSavingItemId(itemId);
+    if (isNaN(value) || value <= 0) return;
 
     // Optimistic update
     setItems((prev) =>
       prev.map((it) => {
         if (it.item_id !== itemId) return it;
-        const newQty   = field === "quantity"   ? val : it.quantity;
-        const newPrice = field === "unit_price"  ? val : it.unit_price;
-        return { ...it, [field]: val, total_price: round2(newQty * newPrice) };
+        if (field === "quantity") {
+          return { ...it, quantity: value, total_price: round2(value * it.unit_price) };
+        } else {
+          const newQty = it.unit_price > 0 ? round2(value / it.unit_price) : it.quantity;
+          return { ...it, total_price: value, quantity: newQty };
+        }
       })
     );
 
     try {
-      const result = await groceryService.updateItem(itemId, { [field]: val });
-      setTotalPrice(result.new_list_total);
-      setWithinBudget(result.new_list_total <= budget);
+      const result = await groceryService.updateItem(itemId, { [field]: value });
       setItems((prev) =>
         prev.map((it) =>
           it.item_id === itemId
-            ? { ...it, quantity: result.quantity, unit_price: result.unit_price, total_price: result.total_price }
+            ? { ...it, quantity: result.quantity, total_price: result.total_price }
             : it
         )
       );
+      setTotalPrice(result.list_total);
     } catch {
       await loadList();
-    } finally {
-      setSavingItemId(null);
     }
   }
+
+  // ── Item actions ──
 
   async function handleDelete(itemId) {
     setDeletingItemId(itemId);
     setItems((prev) => prev.filter((it) => it.item_id !== itemId));
     try {
       await groceryService.removeItem(itemId);
-      await refreshTotals();
+      await silentRefresh();
     } catch {
       await loadList();
     } finally {
@@ -520,7 +517,6 @@ export default function GroceryList() {
     try {
       const result = await groceryService.toggleAlwaysAtHome(itemId);
       setTotalPrice(result.new_total);
-      setWithinBudget(result.new_total <= budget);
     } catch {
       await loadList();
     }
@@ -528,9 +524,9 @@ export default function GroceryList() {
 
   async function handleBulkCategoryToggle(category, categoryItems) {
     setEditingItem(null);
-    const allAtHome   = categoryItems.every((i) => i.always_at_home);
-    const shouldBeAt  = !allAtHome;
-    const toToggle    = categoryItems.filter((i) => i.always_at_home !== shouldBeAt);
+    const allAtHome  = categoryItems.every((i) => i.always_at_home);
+    const shouldBeAt = !allAtHome;
+    const toToggle   = categoryItems.filter((i) => i.always_at_home !== shouldBeAt);
     if (toToggle.length === 0) return;
 
     setItems((prev) =>
@@ -543,22 +539,75 @@ export default function GroceryList() {
 
     try {
       await Promise.all(toToggle.map((item) => groceryService.toggleAlwaysAtHome(item.item_id)));
-      await refreshTotals();
+      await silentRefresh();
     } catch {
       await loadList();
     }
   }
 
+  // ── Bulk hide (view-only — no DB calls) ──
+
+  function toggleSelectItem(itemId) {
+    const updated = new Set(selectedItems);
+    updated.has(itemId) ? updated.delete(itemId) : updated.add(itemId);
+    setSelectedItems(updated);
+  }
+
+  function toggleSelectCategory(categoryItems) {
+    const updated   = new Set(selectedItems);
+    const allPicked = categoryItems.every((item) => updated.has(item.item_id));
+    categoryItems.forEach((item) =>
+      allPicked ? updated.delete(item.item_id) : updated.add(item.item_id)
+    );
+    setSelectedItems(updated);
+  }
+
+  function selectAll() {
+    setSelectedItems(new Set(visibleItems.map((i) => i.item_id)));
+  }
+
+  function hideSelected() {
+    setHiddenItems((prev) => new Set([...prev, ...selectedItems]));
+    setSelectedItems(new Set());
+    setIsSelectionMode(false);
+  }
+
+  function cancelSelection() {
+    setSelectedItems(new Set());
+    setIsSelectionMode(false);
+  }
+
+  // ── Derived values ──
+
+  const visibleItems = useMemo(
+    () => items.filter((i) => !hiddenItems.has(i.item_id)),
+    [items, hiddenItems]
+  );
+
   const groupedItems = useMemo(() => {
     const groups = Object.fromEntries(CATEGORY_ORDER.map((c) => [c, []]));
-    for (const item of items) {
+    for (const item of visibleItems) {
       const cat = item.is_custom ? "Other" : normalizeCategory(item.category);
       groups[cat].push(item);
     }
     return groups;
-  }, [items]);
+  }, [visibleItems]);
 
-  // ── Export helpers ──
+  // Total excluding hidden items AND always_at_home items (frontend only)
+  const visibleTotal = useMemo(
+    () =>
+      Math.round(
+        visibleItems.reduce(
+          (sum, item) => sum + (item.always_at_home ? 0 : item.total_price),
+          0
+        ) * 100
+      ) / 100,
+    [visibleItems]
+  );
+
+  const withinBudget = budget > 0 ? visibleTotal <= budget : true;
+
+  // ── Export ──
 
   function generateTextContent() {
     const date = new Date().toLocaleDateString();
@@ -566,10 +615,10 @@ export default function GroceryList() {
       "PlanMe - Grocery List",
       `Date: ${date}`,
       `Budget: ${formatFCFA(budget)}`,
-      `Total:  ${formatFCFA(totalPrice)}${
+      `Total:  ${formatFCFA(visibleTotal)}${
         withinBudget
           ? " (within budget)"
-          : ` (${formatFCFA(totalPrice - budget)} over budget)`
+          : ` (${formatFCFA(visibleTotal - budget)} over budget)`
       }`,
       "",
     ];
@@ -581,7 +630,7 @@ export default function GroceryList() {
         const atHome = item.always_at_home ? " [at home]" : "";
         const unit   = item.unit ? ` ${item.unit}` : "";
         lines.push(
-          `  ${item.name} x${item.quantity}${unit} @ ${item.unit_price} XAF = ${item.total_price} XAF${atHome}`
+          `  ${item.name} ${item.quantity}${unit} = ${item.total_price} XAF${atHome}`
         );
       }
       lines.push("");
@@ -615,10 +664,7 @@ export default function GroceryList() {
     setShowExportMenu(false);
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: "My Grocery List - PlanMe",
-          text:  generateTextContent(),
-        });
+        await navigator.share({ title: "My Grocery List - PlanMe", text: generateTextContent() });
       } catch {}
     } else {
       await copyToClipboard();
@@ -630,13 +676,7 @@ export default function GroceryList() {
     await copyToClipboard();
   }
 
-  // ── Derived ──
-
-  const totalItems   = items.length;
-  const checkedCount = checkedItems.size;
-  const progressPct  = totalItems > 0 ? Math.round((checkedCount / totalItems) * 100) : 0;
-
-  // ── Loading states ──
+  // ── Loading / error states ──
 
   if (loadingPlan) {
     return (
@@ -705,7 +745,7 @@ export default function GroceryList() {
         onRightAction={handleRegenerate}
       />
 
-      {/* ── Summary banner ── */}
+      {/* ── Budget card ── */}
       <div className="px-4 pt-4">
         <div
           className={[
@@ -725,7 +765,7 @@ export default function GroceryList() {
                   withinBudget ? "text-[#111812] dark:text-white" : "text-red-600 dark:text-red-400"
                 }`}
               >
-                {formatFCFA(totalPrice)}
+                {formatFCFA(visibleTotal)}
               </p>
               {budget > 0 && (
                 <p className="text-xs text-[#618968] mt-0.5">
@@ -734,7 +774,7 @@ export default function GroceryList() {
                     <span className="text-primary font-semibold">✓ within budget</span>
                   ) : (
                     <span className="text-red-500 font-semibold">
-                      — {formatFCFA(totalPrice - budget)} over
+                      — {formatFCFA(visibleTotal - budget)} over
                     </span>
                   )}
                 </p>
@@ -742,43 +782,106 @@ export default function GroceryList() {
             </div>
             <div className="text-right">
               <p className="text-xs font-bold uppercase tracking-widest text-[#618968] mb-1">
-                Progress
+                Items
               </p>
               <p className="text-xl font-bold text-primary">
-                {checkedCount}/{totalItems}
+                {visibleItems.length}
               </p>
-              <p className="text-xs text-[#618968]">{progressPct}%</p>
+              {hiddenItems.size > 0 && (
+                <p className="text-xs text-[#618968]">{hiddenItems.size} hidden</p>
+              )}
             </div>
           </div>
 
+          {/* Budget utilisation bar */}
           <div className="mt-3 w-full bg-gray-100 dark:bg-[#253d28] h-2 rounded-full overflow-hidden">
             <div
-              className="bg-primary h-full rounded-full transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
+              className={[
+                "h-full rounded-full transition-all duration-300",
+                withinBudget ? "bg-primary" : "bg-red-500",
+              ].join(" ")}
+              style={{
+                width: `${Math.min(100, budget > 0 ? (visibleTotal / budget) * 100 : 0)}%`,
+              }}
             />
           </div>
         </div>
       </div>
 
-      {/* ── Items list (grouped by category) ── */}
-      <main className="px-4 pt-4 flex flex-col gap-2">
+      {/* ── Selection / bulk action bar ── */}
+      <div className="flex items-center justify-between px-4 py-2 mt-1">
+        {!isSelectionMode ? (
+          <button
+            type="button"
+            onClick={() => setIsSelectionMode(true)}
+            className="text-sm text-[#618968] font-semibold"
+          >
+            Select items
+          </button>
+        ) : (
+          <div className="flex gap-4 items-center">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-sm font-semibold text-primary"
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              onClick={hideSelected}
+              disabled={selectedItems.size === 0}
+              className="text-sm font-semibold text-red-500 disabled:opacity-40"
+            >
+              Remove ({selectedItems.size})
+            </button>
+            <button
+              type="button"
+              onClick={cancelSelection}
+              className="text-sm text-[#618968]"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
-        {items.length === 0 ? (
+        {hiddenItems.size > 0 && !isSelectionMode && (
+          <button
+            type="button"
+            onClick={() => setHiddenItems(new Set())}
+            className="text-xs text-[#618968]/70 underline"
+          >
+            Show {hiddenItems.size} hidden
+          </button>
+        )}
+      </div>
+
+      {/* ── Items list (grouped by category) ── */}
+      <main className="px-4 pt-1 flex flex-col gap-2">
+
+        {visibleItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <span className="material-symbols-outlined text-5xl text-[#618968]/30">shopping_cart</span>
-            <p className="text-[#618968] text-sm text-center">Your grocery list is empty.</p>
-            <Button variant="outline" size="sm" onClick={() => setShowModal(true)}>
-              Add First Ingredient
-            </Button>
+            <p className="text-[#618968] text-sm text-center">
+              {hiddenItems.size > 0
+                ? 'All items are hidden. Tap “Show hidden” to restore them.'
+                : "Your grocery list is empty."}
+            </p>
+            {hiddenItems.size === 0 && (
+              <Button variant="outline" size="sm" onClick={() => setShowModal(true)}>
+                Add First Ingredient
+              </Button>
+            )}
           </div>
         ) : (
           <>
             {CATEGORY_ORDER.map((category) => {
-              const catItems  = groupedItems[category] ?? [];
+              const catItems   = groupedItems[category] ?? [];
               if (catItems.length === 0) return null;
-              const style     = CATEGORY_STYLES[category];
-              const allAtHome = catItems.every((i) => i.always_at_home);
+              const style      = CATEGORY_STYLES[category];
+              const allAtHome  = catItems.every((i) => i.always_at_home);
               const someAtHome = catItems.some((i) => i.always_at_home);
+              const allSelected = catItems.every((i) => selectedItems.has(i.item_id));
 
               return (
                 <div key={category}>
@@ -791,6 +894,17 @@ export default function GroceryList() {
                       style.border,
                     ].join(" ")}
                   >
+                    {/* Selection checkbox on category */}
+                    {isSelectionMode && (
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={() => toggleSelectCategory(catItems)}
+                        className="w-4 h-4 accent-primary shrink-0"
+                        aria-label={`Select all ${category}`}
+                      />
+                    )}
+
                     <span className={`text-xs font-bold uppercase tracking-widest ${style.text}`}>
                       {category}
                     </span>
@@ -798,41 +912,42 @@ export default function GroceryList() {
                       {catItems.length} item{catItems.length !== 1 ? "s" : ""}
                     </span>
 
-                    {/* Bulk at-home toggle */}
-                    <button
-                      type="button"
-                      onClick={() => handleBulkCategoryToggle(category, catItems)}
-                      title={
-                        allAtHome
-                          ? "Mark all as needed"
-                          : someAtHome
-                            ? "Mark remaining at home"
-                            : "Mark all at home"
-                      }
-                      aria-label={`Toggle all ${category} items at home`}
-                      className={[
-                        "w-6 h-6 rounded border-2 flex items-center justify-center transition-colors shrink-0",
-                        allAtHome
-                          ? "bg-primary/10 border-primary/30 text-primary"
-                          : someAtHome
-                            ? "bg-primary/5 border-primary/20 text-primary/50"
-                            : "border-gray-200 dark:border-white/15 text-gray-300 hover:border-gray-300 hover:text-[#618968]",
-                      ].join(" ")}
-                    >
-                      <span className="material-symbols-outlined text-[12px]">home</span>
-                    </button>
+                    {/* Bulk at-home toggle (hidden while in selection mode) */}
+                    {!isSelectionMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleBulkCategoryToggle(category, catItems)}
+                        title={
+                          allAtHome
+                            ? "Mark all as needed"
+                            : someAtHome
+                              ? "Mark remaining at home"
+                              : "Mark all at home"
+                        }
+                        aria-label={`Toggle all ${category} items at home`}
+                        className={[
+                          "w-6 h-6 rounded border-2 flex items-center justify-center transition-colors shrink-0",
+                          allAtHome
+                            ? "bg-primary/10 border-primary/30 text-primary"
+                            : someAtHome
+                              ? "bg-primary/5 border-primary/20 text-primary/50"
+                              : "border-gray-200 dark:border-white/15 text-gray-300 hover:border-gray-300 hover:text-[#618968]",
+                        ].join(" ")}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">home</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* ── Items in this category ── */}
                   <div className="bg-white dark:bg-[#1a2e1d] rounded-xl overflow-hidden shadow-sm border border-gray-50 dark:border-gray-800 mb-3">
                     {catItems.map((item, index) => {
-                      const isChecked    = checkedItems.has(item.item_id);
-                      const isSaving     = savingItemId === item.item_id;
-                      const isDeleting   = deletingItemId === item.item_id;
                       const isAtHome     = item.always_at_home;
-                      const canEdit      = !isAtHome && !isChecked && !isSaving;
+                      const isDeleting   = deletingItemId === item.item_id;
+                      const isSelected   = selectedItems.has(item.item_id);
+                      const canEdit      = !isAtHome && !isSelectionMode;
                       const isEditingQty = editingItem?.id === item.item_id && editingItem.field === "quantity";
-                      const isEditingPrc = editingItem?.id === item.item_id && editingItem.field === "unit_price";
+                      const isEditingTot = editingItem?.id === item.item_id && editingItem.field === "total_price";
 
                       return (
                         <div
@@ -843,35 +958,31 @@ export default function GroceryList() {
                               ? "border-b border-gray-50 dark:border-gray-800"
                               : "",
                             isAtHome   ? "opacity-50" : "",
-                            isChecked && !isAtHome ? "bg-primary/5" : "",
+                            isSelected ? "bg-primary/5" : "",
                             isDeleting ? "opacity-40 pointer-events-none" : "",
                           ].join(" ")}
                         >
-                          {/* Checkbox */}
-                          <button
-                            type="button"
-                            onClick={() => toggleCheck(item.item_id)}
-                            aria-label={`${isChecked ? "Uncheck" : "Check"} ${item.name}`}
-                            className={[
-                              "mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                              isChecked
-                                ? "bg-primary border-primary"
-                                : "border-gray-300 dark:border-gray-600",
-                            ].join(" ")}
-                          >
-                            {isChecked && (
-                              <span className="material-symbols-outlined text-white text-sm">check</span>
-                            )}
-                          </button>
+                          {/* Checkbox: selection in selection mode, otherwise shopping toggle */}
+                          {isSelectionMode ? (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectItem(item.item_id)}
+                              className="w-5 h-5 accent-primary mt-0.5 shrink-0"
+                              aria-label={`Select ${item.name}`}
+                            />
+                          ) : (
+                            <div className="mt-0.5 w-5 h-5 shrink-0" />
+                          )}
 
-                          {/* Name + formula */}
+                          {/* Content: name + formula */}
                           <div className="flex-1 min-w-0">
                             {/* Name row */}
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p
                                 className={[
                                   "font-semibold text-sm",
-                                  isChecked || isAtHome
+                                  isAtHome
                                     ? "line-through text-gray-400"
                                     : "text-[#111812] dark:text-white",
                                 ].join(" ")}
@@ -890,131 +1001,121 @@ export default function GroceryList() {
                               )}
                             </div>
 
-                            {/* qty × price = total */}
-                            <div className="flex items-center gap-1 mt-1 flex-wrap">
-                              {item.unit && (
-                                <span className="text-xs text-[#618968]">{item.unit} ·</span>
-                              )}
+                            {/* Bidirectional formula: [qty unit] = [total XAF] */}
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
 
-                              {/* Quantity */}
+                              {/* Quantity (click to edit) */}
                               {isEditingQty ? (
                                 <input
                                   type="number"
-                                  value={editValue}
+                                  value={editingItem.value}
                                   min="0.01"
-                                  step="0.01"
+                                  step="0.1"
                                   inputMode="decimal"
                                   autoFocus
-                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onChange={(e) =>
+                                    setEditingItem((prev) => ({ ...prev, value: e.target.value }))
+                                  }
                                   onBlur={() => saveEdit(item.item_id, "quantity")}
                                   onKeyDown={(e) =>
                                     e.key === "Enter" && saveEdit(item.item_id, "quantity")
                                   }
-                                  className="w-14 h-6 text-center text-xs font-bold rounded-md border-2 border-primary bg-white dark:bg-white/10 text-[#111812] dark:text-white focus:outline-none"
+                                  className="w-20 px-2 py-1 text-xs font-bold border-2 border-primary rounded-lg bg-white dark:bg-white/10 text-[#111812] dark:text-white focus:outline-none"
                                   aria-label="Edit quantity"
                                 />
                               ) : (
-                                <button
-                                  type="button"
-                                  disabled={!canEdit}
-                                  onClick={() => canEdit && startEditing(item.item_id, "quantity", item.quantity)}
-                                  title={canEdit ? "Tap to edit quantity" : undefined}
-                                  className={[
-                                    "text-xs font-bold px-1.5 py-0.5 rounded transition-colors",
-                                    canEdit
-                                      ? "text-[#111812] dark:text-white bg-gray-50 dark:bg-white/5 hover:bg-primary/10 active:bg-primary/20"
-                                      : "text-gray-400 cursor-default",
-                                    isSaving ? "opacity-50" : "",
-                                  ].join(" ")}
-                                >
-                                  {isSaving ? "…" : item.quantity}
-                                </button>
-                              )}
-
-                              <span className="text-xs text-[#618968]">×</span>
-
-                              {/* Unit price */}
-                              {isEditingPrc ? (
-                                <input
-                                  type="number"
-                                  value={editValue}
-                                  min="1"
-                                  step="1"
-                                  inputMode="numeric"
-                                  autoFocus
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  onBlur={() => saveEdit(item.item_id, "unit_price")}
-                                  onKeyDown={(e) =>
-                                    e.key === "Enter" && saveEdit(item.item_id, "unit_price")
+                                <span
+                                  onClick={() =>
+                                    canEdit &&
+                                    startEditing(item.item_id, "quantity", item.quantity)
                                   }
-                                  className="w-20 h-6 text-center text-xs font-bold rounded-md border-2 border-primary bg-white dark:bg-white/10 text-[#111812] dark:text-white focus:outline-none"
-                                  aria-label="Edit unit price"
-                                />
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={!canEdit}
-                                  onClick={() => canEdit && startEditing(item.item_id, "unit_price", item.unit_price)}
-                                  title={canEdit ? "Tap to edit price" : undefined}
                                   className={[
-                                    "text-xs font-bold px-1.5 py-0.5 rounded transition-colors",
+                                    "text-xs font-semibold px-1.5 py-0.5 rounded transition-colors",
                                     canEdit
-                                      ? "text-[#111812] dark:text-white bg-gray-50 dark:bg-white/5 hover:bg-primary/10 active:bg-primary/20"
+                                      ? "text-[#111812] dark:text-white cursor-pointer hover:text-primary hover:bg-primary/5"
                                       : "text-gray-400 cursor-default",
-                                    isSaving ? "opacity-50" : "",
                                   ].join(" ")}
+                                  title={canEdit ? "Tap to edit quantity" : undefined}
                                 >
-                                  {formatFCFA(item.unit_price)}
-                                </button>
+                                  {item.quantity} {item.unit}
+                                </span>
                               )}
 
                               <span className="text-xs text-[#618968]">=</span>
 
-                              <span
-                                className={[
-                                  "text-xs font-bold",
-                                  isAtHome
-                                    ? "line-through text-gray-400"
-                                    : isChecked
-                                      ? "text-gray-400"
-                                      : "text-[#111812] dark:text-white",
-                                ].join(" ")}
-                              >
-                                {formatFCFA(item.total_price)}
-                              </span>
+                              {/* Total price (click to edit) */}
+                              {isEditingTot ? (
+                                <input
+                                  type="number"
+                                  value={editingItem.value}
+                                  min="1"
+                                  step="100"
+                                  inputMode="numeric"
+                                  autoFocus
+                                  onChange={(e) =>
+                                    setEditingItem((prev) => ({ ...prev, value: e.target.value }))
+                                  }
+                                  onBlur={() => saveEdit(item.item_id, "total_price")}
+                                  onKeyDown={(e) =>
+                                    e.key === "Enter" && saveEdit(item.item_id, "total_price")
+                                  }
+                                  className="w-28 px-2 py-1 text-xs font-bold border-2 border-primary rounded-lg bg-white dark:bg-white/10 text-[#111812] dark:text-white focus:outline-none"
+                                  aria-label="Edit total price"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() =>
+                                    canEdit &&
+                                    startEditing(item.item_id, "total_price", item.total_price)
+                                  }
+                                  className={[
+                                    "text-xs font-bold px-1.5 py-0.5 rounded transition-colors",
+                                    isAtHome
+                                      ? "line-through text-gray-400 cursor-default"
+                                      : canEdit
+                                        ? "text-[#111812] dark:text-white cursor-pointer hover:text-primary hover:bg-primary/5"
+                                        : "text-[#111812] dark:text-white cursor-default",
+                                  ].join(" ")}
+                                  title={canEdit ? "Tap to edit total price" : undefined}
+                                >
+                                  {item.total_price.toLocaleString("fr-CM")} XAF
+                                </span>
+                              )}
                             </div>
                           </div>
 
-                          {/* Actions */}
-                          <div className="flex items-center gap-1 mt-0.5 shrink-0">
-                            {/* Always-at-home toggle */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleHome(item.item_id)}
-                              aria-label={isAtHome ? "Mark as needed" : "Mark as always at home"}
-                              title={isAtHome ? "I need to buy this" : "I always have this at home"}
-                              className={[
-                                "w-7 h-7 flex items-center justify-center rounded-full transition-colors",
-                                isAtHome
-                                  ? "text-primary bg-primary/10"
-                                  : "text-gray-300 hover:text-[#618968] hover:bg-gray-100 dark:hover:bg-white/10",
-                              ].join(" ")}
-                            >
-                              <span className="material-symbols-outlined text-sm">home</span>
-                            </button>
+                          {/* Actions (hidden in selection mode) */}
+                          {!isSelectionMode && (
+                            <div className="flex items-center gap-1 mt-0.5 shrink-0">
+                              {/* Always-at-home toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleHome(item.item_id)}
+                                aria-label={isAtHome ? "Mark as needed" : "Mark as always at home"}
+                                title={isAtHome ? "I need to buy this" : "I always have this at home"}
+                                className={[
+                                  "w-7 h-7 flex items-center justify-center rounded-full transition-colors",
+                                  isAtHome
+                                    ? "text-primary bg-primary/10"
+                                    : "text-gray-300 hover:text-[#618968] hover:bg-gray-100 dark:hover:bg-white/10",
+                                ].join(" ")}
+                              >
+                                <span className="material-symbols-outlined text-sm">home</span>
+                              </button>
 
-                            {/* Delete */}
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(item.item_id)}
-                              aria-label={`Remove ${item.name}`}
-                              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-sm text-gray-300 hover:text-red-500 transition-colors">
-                                delete
-                              </span>
-                            </button>
-                          </div>
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(item.item_id)}
+                                aria-label={`Remove ${item.name}`}
+                                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-sm text-gray-300 hover:text-red-500 transition-colors">
+                                  delete
+                                </span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1026,11 +1127,11 @@ export default function GroceryList() {
         )}
 
         {/* Hint */}
-        {items.length > 0 && (
+        {visibleItems.length > 0 && !isSelectionMode && (
           <p className="text-xs text-[#618968]/60 text-center pt-1 pb-2">
-            Tap qty or price to edit · tap{" "}
+            Tap qty or total to edit · tap{" "}
             <span className="material-symbols-outlined text-[11px] align-middle">home</span>{" "}
-            or the category icon to mark at home
+            to mark as always at home
           </p>
         )}
       </main>
@@ -1058,7 +1159,7 @@ export default function GroceryList() {
             Add Item
           </Button>
 
-          {/* Export button with dropdown */}
+          {/* Export dropdown */}
           <div className="relative flex-1" ref={exportMenuRef}>
             <Button
               variant="outline"
