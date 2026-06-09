@@ -11,9 +11,12 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-     #------------- CORS Configuration — Allow React frontend
-    CORS(app, 
-         origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    CORS(app,
+         origins=[
+             app.config.get('FRONTEND_URL', 'http://localhost:5173'),
+             'http://localhost:5173',
+             'http://localhost:5174',
+         ],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization"],
          supports_credentials=True)
@@ -54,6 +57,18 @@ def create_app():
     app.register_blueprint(grocery_bp,     url_prefix="/api/grocery")
     app.register_blueprint(ingredients_bp, url_prefix="/api/ingredients")
     app.register_blueprint(ai_bp,          url_prefix="/api/ai")
+
+    with app.app_context():
+        db.create_all()
+        # Auto-seed if database is empty
+        from models import Meal
+        if Meal.query.count() == 0:
+            try:
+                from seed import seed_database
+                seed_database()
+                print("Database seeded successfully")
+            except Exception as e:
+                print(f"Seeding skipped: {e}")
 
     return app
 
