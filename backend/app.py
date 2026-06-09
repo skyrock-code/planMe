@@ -13,7 +13,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # ========== DATABASE CONFIGURATION ==========
+    # Database configuration
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
         app.config['SQLALCHEMY_DATABASE_URI'] = database_url.replace('postgres://', 'postgresql://')
@@ -24,7 +24,7 @@ def create_app():
     
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # ========== ROOT HEALTH ROUTES ==========
+    # Root health routes
     @app.route('/', methods=['GET'])
     def home():
         return jsonify({
@@ -41,7 +41,7 @@ def create_app():
             "timestamp": datetime.utcnow().isoformat()
         }), 200
 
-    # ========== CORS CONFIGURATION ==========
+    # CORS configuration - this is enough, no after_request needed
     CORS(app,
          origins=[
              'http://localhost:5173',
@@ -51,15 +51,6 @@ def create_app():
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization", "Accept"],
          supports_credentials=True)
-
-    # Handle OPTIONS preflight requests
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', 'https://planme-frontend.onrender.com')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
 
     db.init_app(app)
     migrate.init_app(app, db)
