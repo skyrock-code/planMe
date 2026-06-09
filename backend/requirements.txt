@@ -4,3 +4,4 @@ flask-migrate
 flask-jwt-extended
 flask-cors
 werkzeug
+huggingface_hub

@@ -46,12 +46,14 @@ def create_app():
     from routes.meal_plan   import meal_plan_bp
     from routes.grocery     import grocery_bp
     from routes.ingredients import ingredients_bp
+    from routes.ai          import ai_bp
 
     app.register_blueprint(auth_bp,        url_prefix="/api/auth")
     app.register_blueprint(meals_bp,       url_prefix="/api/meals")
     app.register_blueprint(meal_plan_bp,   url_prefix="/api/meal_plan")
     app.register_blueprint(grocery_bp,     url_prefix="/api/grocery")
     app.register_blueprint(ingredients_bp, url_prefix="/api/ingredients")
+    app.register_blueprint(ai_bp,          url_prefix="/api/ai")
 
     return app
 

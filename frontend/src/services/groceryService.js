@@ -40,12 +40,17 @@ const groceryService = {
   },
 
   /**
-   * Persist a quantity change for a single grocery list item.
+   * Update a single grocery list item.
+   * Pass exactly one of:
+   *   { quantity }    — recalculates total_price server-side
+   *   { total_price } — recalculates quantity server-side
+   * unit_price is never changed here; the server reads it from the DB.
+   * Returns { item_id, quantity, total_price, list_total }.
    * @param {number} itemId
-   * @param {number} quantity
+   * @param {{ quantity?: number, total_price?: number }} updates
    */
-  async updateQuantity(itemId, quantity) {
-    const res = await api.patch(`/grocery/item/${itemId}`, { quantity });
+  async updateItem(itemId, updates) {
+    const res = await api.patch(`/grocery/item/${itemId}`, updates);
     return res.data;
   },
 
@@ -70,6 +75,17 @@ const groceryService = {
    */
   async addIngredient(listId, payload) {
     const res = await api.post(`/grocery/${listId}/add`, payload);
+    return res.data;
+  },
+
+  /**
+   * Toggle the "always at home" flag on a single grocery list item.
+   * The server flips the boolean, recalculates the list total,
+   * and returns the new state.
+   * @param {number} itemId
+   */
+  async toggleAlwaysAtHome(itemId) {
+    const res = await api.patch(`/grocery/item/${itemId}/toggle-home`);
     return res.data;
   },
 
