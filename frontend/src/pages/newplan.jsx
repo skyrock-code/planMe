@@ -97,13 +97,15 @@ export default function NewPlan() {
    * On success, navigates to the generated plan.
    */
   async function handleGenerate() {
+    // Validate required fields
     if (!budget || !servings) {
       setError("Please fill in all required fields.");
       return;
     }
 
-    if (!user?.user_id) {
-      setError("User not authenticated.");
+    // FIXED: Check correct user ID field (id, not user_id)
+    if (!user?.id) {
+      setError("User not authenticated. Please log in again.");
       return;
     }
 
@@ -113,26 +115,29 @@ export default function NewPlan() {
 
       const { start_date, end_date } = getPlanDates(duration);
 
-      const prompt =
-        selectedPrefs.length > 0
-          ? `User prefers: ${selectedPrefs.join(", ")}`
-          : "no specific preferences";
-
       const planData = {
-        user_id: user.user_id,
+        user_id: user.id,  // FIXED: changed from user.user_id to user.id
         start_date,
         end_date,
         budget: parseFloat(budget),
         servings: parseInt(servings, 10),
         cooking_frequency: frequency,
-        prompt,
       };
 
+      console.log("Sending plan data:", planData); // Debug log
+
       const response = await planService.createPlan(planData);
-      navigate(`/week-plan/${response.plan_id}`);
+      
+      if (response.plan_id) {
+        navigate(`/week-plan/${response.plan_id}`);
+      } else {
+        throw new Error("No plan_id returned from server");
+      }
     } catch (err) {
+      console.error("Plan generation error:", err);
       setError(
         err.response?.data?.error ||
+          err.message ||
           "Failed to create plan. Please try again."
       );
     } finally {

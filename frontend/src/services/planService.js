@@ -13,7 +13,7 @@ const planService = {
       user_id:           planData.user_id,
       start_date:        planData.start_date,
       end_date:          planData.end_date,
-      total_budget:      planData.budget,
+      total_budget:      planData.budget,      // FIXED: changed from budget to total_budget
       cooking_frequency: planData.cooking_frequency || "every_2_days",
     });
     return response.data;

@@ -28,8 +28,8 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
-      - key: VITE_API_URL
-        value: https://planme-backend.onrender.com
+      - key: VITE_API_BASE_URL
+        value: https://planme-backend-kgl6.onrender.com
     routes:
       - type: rewrite
         source: /*
