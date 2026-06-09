@@ -1,6 +1,6 @@
-import os  # ADD THIS AT THE TOP
-from flask import Flask, jsonify  # ADD jsonify
-from datetime import datetime  # ADD datetime
+import os
+from flask import Flask, jsonify
+from datetime import datetime
 from flask_cors import CORS
 from config import Config
 from extensions import db
@@ -13,11 +13,9 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # ========== ADD THIS DATABASE CONFIGURATION SECTION ==========
-    # Use PostgreSQL on Render, SQLite locally
+    # ========== DATABASE CONFIGURATION ==========
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
-        # Render uses postgres:// but SQLAlchemy requires postgresql://
         app.config['SQLALCHEMY_DATABASE_URI'] = database_url.replace('postgres://', 'postgresql://')
         print(f"Using PostgreSQL database")
     else:
@@ -25,9 +23,8 @@ def create_app():
         print(f"Using SQLite database")
     
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    # =============================================================
 
-    # ========== ADD ROOT HEALTH ROUTES ==========
+    # ========== ROOT HEALTH ROUTES ==========
     @app.route('/', methods=['GET'])
     def home():
         return jsonify({
@@ -43,11 +40,10 @@ def create_app():
             "status": "alive",
             "timestamp": datetime.utcnow().isoformat()
         }), 200
-    # ===========================================
 
-        CORS(app,
+    # ========== CORS CONFIGURATION (FIXED INDENTATION) ==========
+    CORS(app,
          origins=[
-             app.config.get('FRONTEND_URL', 'http://localhost:5173'),
              'http://localhost:5173',
              'http://localhost:5174',
              'https://planme-frontend.onrender.com',
@@ -56,7 +52,7 @@ def create_app():
          allow_headers=["Content-Type", "Authorization", "Accept"],
          supports_credentials=True)
 
-    # ADD THIS AFTER CORS - handles OPTIONS preflight requests
+    # Handle OPTIONS preflight requests
     @app.after_request
     def after_request(response):
         response.headers.add('Access-Control-Allow-Origin', 'https://planme-frontend.onrender.com')
@@ -69,7 +65,7 @@ def create_app():
     migrate.init_app(app, db)
     jwt = JWTManager(app)
 
-    # Import ALL models so migrations can detect them
+    # Import ALL models
     from models import (
         User,
         UserAllergy,
@@ -106,7 +102,6 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        # Auto-seed if database is empty
         from models import Meal
         if Meal.query.count() == 0:
             try:
@@ -117,7 +112,6 @@ def create_app():
                 print(f"Seeding skipped: {e}")
 
     return app
-
 
 if __name__ == "__main__":
     app = create_app()
