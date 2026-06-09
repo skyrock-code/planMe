@@ -41,7 +41,7 @@ def create_app():
             "timestamp": datetime.utcnow().isoformat()
         }), 200
 
-    # ========== CORS CONFIGURATION (FIXED INDENTATION) ==========
+    # ========== CORS CONFIGURATION ==========
     CORS(app,
          origins=[
              'http://localhost:5173',
