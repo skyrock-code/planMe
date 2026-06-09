@@ -7,10 +7,15 @@ import axios from "axios";
  * Automatically handles 401 token expiry.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+// TEMPORARY: Hardcoded for production testing
+// TODO: Change back to environment variable after confirming it works
+const API_BASE = "https://planme-backend-kgl6.onrender.com";
+
+// Original code (commented for now)
+// const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 const api = axios.create({
-  baseURL: `${API_BASE}/api`,  // This adds /api to the URL
+  baseURL: `${API_BASE}/api`,
   headers: { "Content-Type": "application/json" },
 });
 
