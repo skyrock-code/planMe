@@ -6,3 +6,19 @@ backend/instance/
 *.pyc
 ~$*.xlsx
 *.GIF
+
+# Environment files
+.env
+.env.local
+.env.production.local
+backend/.env
+
+# Test files with secrets
+backend/test_ai.py
+
+# Python
+backend/.venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/

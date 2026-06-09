@@ -134,8 +134,82 @@ def check_excel_structure(excel_path="PlanMe_Database_v7-3.xlsx"):
 
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) > 1 and sys.argv[1] == "--check":
         check_excel_structure()
     else:
         import_from_excel()
+
+
+def seed_database(excel_path=None):
+    """
+    Callable from app.py auto-seed block (already inside app context).
+    Looks for the Excel file relative to this file's directory.
+    Raises FileNotFoundError if no Excel file is found — caller's try/except
+    handles this gracefully with "Seeding skipped".
+    """
+    import os
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        excel_path,
+        os.path.join(base_dir, "PlanMe_Database_v8.xlsx"),
+        os.path.join(base_dir, "../PlanMe_Database_v8.xlsx"),
+    ]
+    resolved = next((p for p in candidates if p and os.path.isfile(p)), None)
+    if resolved is None:
+        raise FileNotFoundError("No Excel seed file found — skipping auto-seed.")
+
+    import pandas as pd
+
+    meals_df            = pd.read_excel(resolved, sheet_name="meals")
+    ingredients_df      = pd.read_excel(resolved, sheet_name="ingredients")
+    conversions_df      = pd.read_excel(resolved, sheet_name="unit_conversions")
+    meal_ingredients_df = pd.read_excel(resolved, sheet_name="meal_ingredients")
+
+    from extensions import db
+    from models import User, Meal, Ingredient, UnitConversion, MealIngredient
+
+    admin = User(username="admin", email="admin@planme.com")
+    admin.set_password("admin123")
+    db.session.add(admin)
+    db.session.flush()
+
+    for _, row in meals_df.iterrows():
+        db.session.add(Meal(
+            meal_id      = row.get("meal_id"),
+            user_id      = admin.user_id,
+            meal_name    = row.get("meal_name") or row.get("name"),
+            servings     = row.get("servings", 4),
+            cuisine_type = row.get("cuisine_type") or row.get("category", "traditional"),
+        ))
+    db.session.commit()
+
+    for _, row in ingredients_df.iterrows():
+        db.session.add(Ingredient(
+            id            = row.get("id"),
+            name          = row.get("name") or row.get("ingredient_name"),
+            market_unit   = row.get("market_unit", "piece"),
+            unit_price_xaf= row.get("unit_price_xaf") or row.get("price", 0),
+        ))
+    db.session.commit()
+
+    for _, row in conversions_df.iterrows():
+        db.session.add(UnitConversion(
+            id                = row.get("id"),
+            ingredient_id     = row.get("ingredient_id"),
+            cooking_unit      = row.get("cooking_unit"),
+            market_unit       = row.get("market_unit"),
+            conversion_factor = row.get("conversion_factor", 1.0),
+            note              = row.get("note", ""),
+        ))
+    db.session.commit()
+
+    for _, row in meal_ingredients_df.iterrows():
+        db.session.add(MealIngredient(
+            meal_id      = row.get("meal_id"),
+            ingredient_id= row.get("ingredient_id"),
+            quantity     = row.get("quantity", 1),
+            cooking_unit = row.get("cooking_unit", "piece"),
+        ))
+    db.session.commit()
