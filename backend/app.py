@@ -16,6 +16,7 @@ def create_app():
              app.config.get('FRONTEND_URL', 'http://localhost:5173'),
              'http://localhost:5173',
              'http://localhost:5174',
+             'https://planme-frontend.onrender.com',  # Add production frontend
          ],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization"],
@@ -50,7 +51,9 @@ def create_app():
     from routes.grocery     import grocery_bp
     from routes.ingredients import ingredients_bp
     from routes.ai          import ai_bp
+    from routes.health      import health_bp  # ADD THIS
 
+    app.register_blueprint(health_bp,         url_prefix="/")  # ADD THIS - root route
     app.register_blueprint(auth_bp,        url_prefix="/api/auth")
     app.register_blueprint(meals_bp,       url_prefix="/api/meals")
     app.register_blueprint(meal_plan_bp,   url_prefix="/api/meal_plan")
