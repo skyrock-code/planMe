@@ -1,0 +1,10 @@
+[33m4c83bb4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Merge branch 'claude/project-overview-Ipuss' into main
+[33m7665947[m[33m ([m[1;32mclaude/project-overview-Ipuss[m[33m)[m Merge branch 'claude/project-overview-Ipuss' of https://github.com/skyrock-code/planMe into claude/project-overview-Ipuss
+[33m6a1e45e[m[33m ([m[1;31morigin/claude/project-overview-Ipuss[m[33m)[m Make dotenv import safe; add start_dev.bat for one-step local setup
+[33m277fa9f[m Add python-dotenv so backend loads .env automatically on startup
+[33m66ada2e[m add hf token to server
+[33m79586b5[m Fix AI fallback: off-by-one total_days, preference chip pass-through, add .env.example
+[33m25bb0a1[m Fix CORS + wire AI endpoint into plan generation flow
+[33mad0c9b7[m Fix UI: visible food SVGs, forest green primary, rectangular glance cards
+[33m591440d[m Add persistent always-at-home with 7-plan review cycle
+[33m4a0cddb[m Add one-time onboarding screen shown strictly once after registration

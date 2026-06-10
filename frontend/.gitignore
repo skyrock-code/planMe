@@ -59,3 +59,9 @@ frontend/.env.*.local
 *.swp
 *.swo
 *~
+
+# Secrets
+.env
+backend/.env
+*.env
+*.env.example

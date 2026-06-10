@@ -8,6 +8,7 @@ from models import (
     GroceryList,
     GroceryListItem,
     UserIngredient,
+    UnitConversion,
 )
 
 grocery_bp = Blueprint("grocery", __name__)
@@ -109,6 +110,10 @@ def generate_grocery_list(plan_id):
     # ─────────────────────────────────────
     grocery_map = {}
 
+    # Get household size for scaling
+    user = plan.user
+    household_size = getattr(user, 'household_size', 4) or 4
+
     for plan_meal in plan_meals:
 
         meal = Meal.query.get(plan_meal.meal_id)
@@ -123,10 +128,28 @@ def generate_grocery_list(plan_id):
 
             ingredient = meal_ingredient.ingredient
 
-            # Scale ingredient quantity by how many days this meal covers
-            total_quantity = meal_ingredient.quantity * day_scale
+            # Find unit conversion for this cooking unit
+            conversion = UnitConversion.query.filter_by(
+                ingredient_id=ingredient.id,
+                cooking_unit=meal_ingredient.cooking_unit
+            ).first()
 
-            # Calculate total cost using correct price field: unit_price_xaf
+            # Convert cooking unit to market unit
+            if conversion:
+                market_quantity = meal_ingredient.quantity * conversion.conversion_factor
+            else:
+                market_quantity = meal_ingredient.quantity
+
+            # Scale from recipe servings to household size
+            if meal.servings and meal.servings > 0:
+                scale_factor = household_size / meal.servings
+            else:
+                scale_factor = 1.0
+
+            # Apply household scaling and duration
+            total_quantity = market_quantity * scale_factor * day_scale
+
+            # Calculate total cost using market unit quantity and market price
             total_price = round(
                 total_quantity * ingredient.unit_price_xaf,
                 2

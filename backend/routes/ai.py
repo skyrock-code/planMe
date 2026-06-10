@@ -105,7 +105,7 @@ def ai_generate_plan():
 
     safe_meals_payload = []
     for meal in safe_meals:
-        base_cost = service.estimate_meal_cost(meal.meal_id)
+        base_cost = service.estimate_meal_cost(meal.meal_id, plan.user_id)
         safe_meals_payload.append({
             "meal_id":          meal.meal_id,
             "meal_name":        meal.meal_name,
@@ -116,6 +116,7 @@ def ai_generate_plan():
 
     # ── Step 2: Build context and call the model ──────────────────────
     user       = User.query.get(plan.user_id)
+    household_size = getattr(user, 'household_size', 4) or 4 if user else 4
     diet_prefs = [ud.diet_type for ud in user.diets] if user else []
     total_days = (plan.end_date - plan.start_date).days + 1
 
@@ -126,6 +127,7 @@ def ai_generate_plan():
 
     user_message = (
         f"Budget: {plan.total_budget} XAF\n"
+        f"Household size: {household_size} people\n"
         f"Start date: {plan.start_date}\n"
         f"End date: {plan.end_date}\n"
         f"Total days: {total_days}\n"
@@ -138,7 +140,8 @@ def ai_generate_plan():
         f"- All start_date values must be within {plan.start_date} and {plan.end_date}.\n"
         "- Each meal must have a different start_date.\n"
         "- The total cost (sum of total_cost_xaf × duration_days per meal) "
-        "should not exceed the budget.\n\n"
+        "should not exceed the budget.\n"
+        "- All costs are already scaled for the household size.\n\n"
         "Available meals:\n"
         f"{json.dumps(safe_meals_payload, ensure_ascii=False)}\n\n"
         "Respond with this exact JSON structure, nothing else:\n"

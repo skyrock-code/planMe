@@ -1,6 +1,6 @@
 import random
 from datetime import date, timedelta
-from models import Meal, User
+from models import Meal, User, UnitConversion
 
 
 class MealFilterService:
@@ -79,7 +79,7 @@ class MealFilterService:
         if budget_per_meal is not None:
             safe_meals = [
                 m for m in safe_meals
-                if self.estimate_meal_cost(m.meal_id) <= budget_per_meal
+                if self.estimate_meal_cost(m.meal_id, user_id) <= budget_per_meal
             ]
 
         return safe_meals
@@ -91,19 +91,58 @@ class MealFilterService:
     # one cook of a meal (duration_days scaling
     # is handled by the caller).
     # ─────────────────────────────────────────
-    def estimate_meal_cost(self, meal_id):
+    def estimate_meal_cost(self, meal_id, user_id=None):
         """
-        Returns the XAF cost of cooking a meal once,
+        Returns the XAF cost of cooking a meal once for the user's household,
         summed across all its ingredients.
+
+        Applies:
+        - Unit conversions (cooking unit → market unit)
+        - Household size scaling
+        - Recipe servings normalization
+
         Returns 0.0 if the meal is not found or has no ingredients.
         """
         meal = Meal.query.get(meal_id)
         if not meal or not meal.ingredients:
             return 0.0
-        return round(
-            sum(mi.quantity * mi.ingredient.unit_price_xaf for mi in meal.ingredients),
-            2,
-        )
+
+        # Get household size for scaling
+        household_size = 4  # default
+        if user_id:
+            user = User.query.get(user_id)
+            if user and user.household_size:
+                household_size = user.household_size
+
+        total_cost = 0.0
+        for mi in meal.ingredients:
+            ingredient = mi.ingredient
+
+            # Find unit conversion from cooking unit to market unit
+            conversion = UnitConversion.query.filter_by(
+                ingredient_id=ingredient.id,
+                cooking_unit=mi.cooking_unit
+            ).first()
+
+            # Convert cooking quantity to market quantity
+            if conversion:
+                market_quantity = mi.quantity * conversion.conversion_factor
+            else:
+                market_quantity = mi.quantity
+
+            # Scale from recipe servings to household size
+            if meal.servings and meal.servings > 0:
+                scale_factor = household_size / meal.servings
+            else:
+                scale_factor = 1.0
+
+            scaled_quantity = market_quantity * scale_factor
+
+            # Calculate ingredient cost
+            ingredient_cost = scaled_quantity * ingredient.unit_price_xaf
+            total_cost += ingredient_cost
+
+        return round(total_cost, 2)
 
     # ─────────────────────────────────────────
     # generate_weekly_plan
@@ -163,7 +202,7 @@ class MealFilterService:
 
         # Precompute single-cook costs to avoid repeated DB queries per slot
         base_costs = {
-            m.meal_id: self.estimate_meal_cost(m.meal_id)
+            m.meal_id: self.estimate_meal_cost(m.meal_id, user_id)
             for m in eligible_meals
         }
 
