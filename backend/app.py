@@ -1,3 +1,9 @@
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; rely on system environment variables
+
 from flask import Flask, jsonify
 from datetime import datetime
 from flask_cors import CORS
