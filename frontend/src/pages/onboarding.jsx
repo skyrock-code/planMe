@@ -96,7 +96,7 @@ export default function Onboarding() {
       {/* Header */}
       <div className="px-4 pt-10 pb-6 max-w-md mx-auto text-center">
         <h1 className="text-2xl font-extrabold text-[#111812] dark:text-white">
-          Let's get to know you 🌿
+          Let's get to know you !
         </h1>
         <p className="text-sm text-[#618968] mt-2">
           Help us plan better meals for your household
@@ -283,7 +283,7 @@ export default function Onboarding() {
             disabled={saving}
             icon={saving ? undefined : "rocket_launch"}
           >
-            {saving ? "Saving..." : "Start Planning 🎯"}
+            {saving ? "Saving..." : "Start Planning "}
           </Button>
         </div>
 
