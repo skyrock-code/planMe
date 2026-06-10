@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import planService from "../services/planService";
+import groceryService from "../services/groceryService";
 import TopAppBar from "../components/layout/TopAppBar";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
@@ -65,6 +66,12 @@ export default function NewPlan() {
   // ── API state ──
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // ── Review modal state ──
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewItems, setReviewItems] = useState([]);
+  const [generatedPlanId, setGeneratedPlanId] = useState(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   // ── Plan Date Calculation ──
   function getPlanDates(duration) {
@@ -129,7 +136,14 @@ export default function NewPlan() {
       };
 
       const response = await planService.createPlan(planData);
-      navigate(`/week-plan/${response.plan_id}`);
+      setGeneratedPlanId(response.plan_id);
+
+      if (response.needs_review && response.needs_review.length > 0) {
+        setReviewItems(response.needs_review);
+        setShowReviewModal(true);
+      } else {
+        navigate(`/week-plan/${response.plan_id}`);
+      }
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -286,6 +300,70 @@ export default function NewPlan() {
         {/* iOS home indicator spacing */}
         <div className="h-4" />
       </div>
+
+      {/* ── Always-at-home review modal ── */}
+      {showReviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-background-dark rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-[#111812] dark:text-white mb-1">
+              Still have these at home?
+            </h3>
+            <p className="text-sm text-[#618968] mb-4">
+              You've had these items marked "always at home" for 7 plans. Are they still available?
+            </p>
+
+            <div className="flex flex-wrap gap-2 mb-6">
+              {reviewItems.map((item) => (
+                <span
+                  key={item}
+                  className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-semibold"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={reviewLoading}
+                onClick={async () => {
+                  setReviewLoading(true);
+                  try {
+                    for (const item of reviewItems) {
+                      await groceryService.resetAtHomeCounter(item);
+                    }
+                  } finally {
+                    setShowReviewModal(false);
+                    navigate(`/week-plan/${generatedPlanId}`);
+                  }
+                }}
+                className="flex-1 bg-primary text-[#111812] font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                Yes, still have them
+              </button>
+              <button
+                type="button"
+                disabled={reviewLoading}
+                onClick={async () => {
+                  setReviewLoading(true);
+                  try {
+                    for (const item of reviewItems) {
+                      await groceryService.removeFromAtHome(item);
+                    }
+                  } finally {
+                    setShowReviewModal(false);
+                    navigate(`/week-plan/${generatedPlanId}`);
+                  }
+                }}
+                className="flex-1 border border-red-400 text-red-500 font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                No, remove them
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,11 +3,35 @@ from datetime import datetime, timedelta
 from extensions import db
 from models import (
     MealPlan, Meal, MealPlanMeal,
-    User,
+    User, UserIngredient,
 )
 from services.meal_filter_service import MealFilterService
 
 meal_plan_bp = Blueprint('meal_plan', __name__)
+
+
+# ─────────────────────────────────────────
+# HELPER: increment plan counters for always-at-home ingredients
+# ─────────────────────────────────────────
+def increment_at_home_counters(user_id):
+    """
+    Increments plan_counter for every always-at-home ingredient of this user.
+    Returns a list of ingredient names whose counter has reached 7,
+    indicating the user should be asked whether they still have them.
+    """
+    user_ingredients = UserIngredient.query.filter_by(
+        user_id=user_id,
+        always_at_home=True,
+    ).all()
+
+    needs_review = []
+    for ui in user_ingredients:
+        ui.plan_counter += 1
+        if ui.plan_counter >= 7:
+            needs_review.append(ui.ingredient_name)
+
+    db.session.commit()
+    return needs_review
 
 
 # ─────────────────────────────────────────
@@ -358,7 +382,9 @@ def generate_plan():
 
     db.session.commit()
 
-    return jsonify({
+    needs_review = increment_at_home_counters(user.user_id)
+
+    response_data = {
         "message":        "Meal plan generated successfully",
         "plan_id":        plan.plan_id,
         "meals_assigned": len(schedule),
@@ -369,4 +395,12 @@ def generate_plan():
             "diet_preferences":   sorted({ud.diet_type.lower() for ud in user.diets}),
             "cooking_frequency":  cooking_frequency,
         },
-    }), 201
+    }
+
+    if needs_review:
+        response_data["needs_review"] = needs_review
+        response_data["review_message"] = (
+            f"Do you still have {', '.join(needs_review)} at home?"
+        )
+
+    return jsonify(response_data), 201

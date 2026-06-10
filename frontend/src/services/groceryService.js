@@ -100,6 +100,26 @@ const groceryService = {
     });
     return res.data;
   },
+
+  /**
+   * Reset the 7-plan counter for an always-at-home ingredient.
+   * Call when user confirms they still have the ingredient.
+   * @param {string} ingredientName
+   */
+  async resetAtHomeCounter(ingredientName) {
+    const res = await api.post(`/grocery/reset-at-home/${encodeURIComponent(ingredientName)}`);
+    return res.data;
+  },
+
+  /**
+   * Remove an ingredient from the user's always-at-home list.
+   * Call when user confirms they no longer have it at home.
+   * @param {string} ingredientName
+   */
+  async removeFromAtHome(ingredientName) {
+    const res = await api.delete(`/grocery/remove-at-home/${encodeURIComponent(ingredientName)}`);
+    return res.data;
+  },
 };
 
 export default groceryService;
