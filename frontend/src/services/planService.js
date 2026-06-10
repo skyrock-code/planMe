@@ -8,6 +8,17 @@ import api from "./api";
  */
 const planService = {
 
+  /**
+   * Generate meals for an existing plan using the AI endpoint.
+   * Replaces any previously assigned meals with AI-selected ones.
+   * Falls back to rule-based selection when HF_TOKEN is absent.
+   * @param {{ plan_id: number, prompt: string }} params
+   */
+  async generateAIPlan({ plan_id, prompt }) {
+    const response = await api.post("/ai/generate-plan", { plan_id, prompt });
+    return response.data;
+  },
+
   async createPlan(planData) {
     const response = await api.post("/meal_plan/generate", {
       user_id:           planData.user_id,
