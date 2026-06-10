@@ -24,8 +24,14 @@ export function AuthProvider({ children }) {
 
   async function login(credentials) {
     const data = await authService.login(credentials);
-    setUser({ user_id: data.user_id, username: data.username });
-    navigate("/dashboard");
+    const userData = { user_id: data.user_id, username: data.username };
+    setUser(userData);
+    const onboardingKey = `planme_onboarded_${userData.user_id}`;
+    if (!localStorage.getItem(onboardingKey)) {
+      navigate("/onboarding");
+    } else {
+      navigate("/dashboard");
+    }
   }
 
   async function register(userData) {

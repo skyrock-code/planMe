@@ -28,6 +28,7 @@ import NewPlan     from "./pages/newplan";
 import WeekPlan    from "./pages/weekplan";
 import GroceryList from "./pages/groceryList";
 import Profile     from "./pages/profile";
+import Onboarding  from "./pages/onboarding";
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export default function AppRoutes() {
       <Route path="/grocery/:planId" element={<GroceryList />} />
       <Route path="/grocery"       element={<GroceryList />} />
       <Route path="/profile"       element={<Profile />}     />
+      <Route path="/onboarding"    element={<Onboarding />}  />
 
       {/* 
         TODO Phase 4: Add a catch-all 404 route
