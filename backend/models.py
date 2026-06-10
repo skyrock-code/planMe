@@ -176,6 +176,10 @@ class UserIngredient(db.Model):
 
     estimated_price = db.Column(db.Float)
 
+    always_at_home = db.Column(db.Boolean, default=False, server_default=db.false())
+
+    plan_counter = db.Column(db.Integer, default=0, server_default=db.text('0'))
+
     def __repr__(self):
         return f"<UserIngredient {self.ingredient_name}>"
 
@@ -614,6 +618,12 @@ class GroceryListItem(db.Model):
     ingredient_id = db.Column(
         db.Integer,
         db.ForeignKey("ingredient.id"),
+        nullable=True
+    )
+
+    user_ingredient_id = db.Column(
+        db.Integer,
+        db.ForeignKey("user_ingredient.id"),
         nullable=True
     )
 
