@@ -117,7 +117,7 @@ def ai_generate_plan():
     # ── Step 2: Build context and call the model ──────────────────────
     user       = User.query.get(plan.user_id)
     diet_prefs = [ud.diet_type for ud in user.diets] if user else []
-    total_days = (plan.end_date - plan.start_date).days
+    total_days = (plan.end_date - plan.start_date).days + 1
 
     system_prompt = (
         "You are a meal planning assistant for Cameroonian home cooks. "
@@ -239,13 +239,21 @@ def ai_generate_plan():
         }), 201
 
     else:
-        # Fallback: use MealFilterService rule-based schedule
+        # Parse session preference chips from the prompt when AI is unavailable.
+        # Prompt format from frontend: "User prefers: vegetarian, spicy" (comma-separated)
+        extra_prefs = []
+        if prompt.lower().startswith("user prefers:"):
+            raw = prompt[len("user prefers:"):].strip()
+            extra_prefs = [p.strip() for p in raw.split(",") if p.strip()]
+
+        # Fallback: use MealFilterService rule-based schedule, honouring chip prefs
         schedule = service.generate_weekly_plan(
             user_id           = plan.user_id,
             budget            = plan.total_budget,
             cooking_frequency = plan.cooking_frequency or "every_2_days",
             start_date        = plan.start_date,
             end_date          = plan.end_date,
+            extra_prefs       = extra_prefs or None,
         )
 
         for slot in schedule:
