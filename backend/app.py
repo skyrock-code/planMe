@@ -1,3 +1,10 @@
+try:
+    from dotenv import load_dotenv
+    from pathlib import Path
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 import os
 from flask import Flask, jsonify
 from datetime import datetime
@@ -22,31 +29,29 @@ def create_app():
     
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-in-production')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire for defense day
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False
+
+    # CORS configuration
+    CORS(app,
+         resources={r"/api/*": {"origins": "*"}},
+         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+         allow_headers=["Content-Type", "Authorization", "Accept"])
+
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        return response
 
     # Health routes
-    @app.route('/', methods=['GET'])
-    def home():
-        return jsonify({
-            "message": "PlanMe API is running!",
-            "status": "healthy",
-            "version": "1.0.0"
-        }), 200
-
-    @app.route('/ping', methods=['GET'])
+    @app.route("/ping", methods=["GET"])
     def ping():
         return jsonify({"status": "alive", "timestamp": datetime.utcnow().isoformat()}), 200
 
-    # CORS - THIS IS THE ONLY CORS CONFIGURATION NEEDED
-    CORS(app,
-         origins=[
-             'http://localhost:5173',
-             'http://localhost:5174',
-             'https://planme-frontend.onrender.com'
-         ],
-         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization"],
-         supports_credentials=True)
+    @app.route("/", methods=["GET"])
+    def home():
+        return jsonify({"message": "PlanMe API running", "status": "healthy"}), 200
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -91,4 +96,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=True, host="0.0.0.0", port=5000)

@@ -170,7 +170,50 @@ export default function WeekPlan() {
       onRetry={fetchPlanData}
       loadingMsg="Loading your meal plan..."
     >
-      <div className="min-h-screen bg-background-light dark:bg-background-dark">
+      <div className="relative min-h-screen bg-background-light dark:bg-background-dark">
+
+        {/* Food background decoration */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
+
+          {/* Top right — pepper */}
+          <div className="absolute -top-8 -right-8 w-64 h-64 opacity-20">
+            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="120" cy="80" rx="40" ry="70" stroke="#2d5a27" strokeWidth="4" fill="none" transform="rotate(-20 120 80)" />
+              <path d="M120 10 C125 0,140 -2,145 5 C140 12,130 15,120 10Z" fill="#2d5a27" />
+              <path d="M80 50 C60 40,50 60,55 80" stroke="#2d5a27" strokeWidth="3" fill="none" />
+            </svg>
+          </div>
+
+          {/* Bottom left — plantain bunch */}
+          <div className="absolute bottom-20 -left-10 w-52 h-52 opacity-15">
+            <svg viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M30 130 C20 80,40 50,70 30 C100 10,120 30,110 60 C90 80,70 100,50 120 C40 125,35 128,30 130Z" stroke="#2d5a27" strokeWidth="5" fill="none" />
+              <path d="M50 120 C40 70,60 45,85 30" stroke="#2d5a27" strokeWidth="4" fill="none" />
+              <path d="M70 110 C60 60,80 40,105 25" stroke="#2d5a27" strokeWidth="3" fill="none" />
+            </svg>
+          </div>
+
+          {/* Center right — tomato */}
+          <div className="absolute top-1/3 -right-6 w-40 h-40 opacity-[0.12]">
+            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="55" r="35" stroke="#2d5a27" strokeWidth="5" fill="none" />
+              <path d="M50 20 C55 10,65 8,70 15 C65 22,58 25,50 20Z" fill="#2d5a27" />
+              <path d="M45 22 C40 12,30 10,25 17 C30 24,38 27,45 22Z" fill="#2d5a27" />
+              <path d="M35 55 C30 45,20 50,25 60" stroke="#2d5a27" strokeWidth="2" fill="none" />
+            </svg>
+          </div>
+
+          {/* Bottom right — okra cross-section */}
+          <div className="absolute bottom-20 -right-4 w-32 h-32 opacity-10">
+            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="30" stroke="#2d5a27" strokeWidth="4" fill="none" />
+              <circle cx="50" cy="50" r="10" stroke="#2d5a27" strokeWidth="2" fill="none" />
+              <line x1="50" y1="20" x2="50" y2="80" stroke="#2d5a27" strokeWidth="2" />
+              <line x1="20" y1="50" x2="80" y2="50" stroke="#2d5a27" strokeWidth="2" />
+            </svg>
+          </div>
+
+        </div>
 
         {/* Top bar */}
         <TopAppBar

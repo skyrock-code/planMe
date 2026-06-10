@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import planService from "../services/planService";
+import groceryService from "../services/groceryService";
 import TopAppBar from "../components/layout/TopAppBar";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
@@ -66,6 +67,12 @@ export default function NewPlan() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // ── Review modal state ──
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewItems, setReviewItems] = useState([]);
+  const [generatedPlanId, setGeneratedPlanId] = useState(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+
   // ── Plan Date Calculation ──
   function getPlanDates(duration) {
     const today = new Date();
@@ -103,7 +110,6 @@ export default function NewPlan() {
       return;
     }
 
-    // FIXED: Check correct user ID field (id, not user_id)
     if (!user?.id) {
       setError("User not authenticated. Please log in again.");
       return;
@@ -115,8 +121,14 @@ export default function NewPlan() {
 
       const { start_date, end_date } = getPlanDates(duration);
 
+      const prompt =
+        selectedPrefs.length > 0
+          ? `User prefers: ${selectedPrefs.join(", ")}`
+          : `Create a ${duration.toLowerCase()} meal plan with budget ${budget} XAF for ${servings} people`;
+
+      // Step 1: Create plan record + get plan_id (also increments at-home counters)
       const planData = {
-        user_id: user.id,  // FIXED: changed from user.user_id to user.id
+        user_id: user.id,
         start_date,
         end_date,
         budget: parseFloat(budget),
@@ -124,14 +136,26 @@ export default function NewPlan() {
         cooking_frequency: frequency,
       };
 
-      console.log("Sending plan data:", planData); // Debug log
+      const newPlan = await planService.createPlan(planData);
 
-      const response = await planService.createPlan(planData);
-      
-      if (response.plan_id) {
-        navigate(`/week-plan/${response.plan_id}`);
+      if (!newPlan.plan_id) {
+        throw new Error("Failed to create plan — no plan_id returned.");
+      }
+
+      setGeneratedPlanId(newPlan.plan_id);
+
+      // Step 2: Fill the plan with AI-selected meals (falls back to rule-based)
+      await planService.generateAIPlan({
+        plan_id: newPlan.plan_id,
+        prompt,
+      });
+
+      // Show always-at-home review modal if triggered by plan creation
+      if (newPlan.needs_review && newPlan.needs_review.length > 0) {
+        setReviewItems(newPlan.needs_review);
+        setShowReviewModal(true);
       } else {
-        throw new Error("No plan_id returned from server");
+        navigate(`/week-plan/${newPlan.plan_id}`);
       }
     } catch (err) {
       console.error("Plan generation error:", err);
@@ -258,7 +282,7 @@ export default function NewPlan() {
                   className={[
                     "px-4 py-2 rounded-full text-sm font-semibold border transition-all",
                     selected
-                      ? "bg-primary text-[#111812] border-primary"
+                      ? "bg-primary text-white border-primary"
                       : "bg-transparent text-[#618968] border-[#dbe6dd] dark:border-white/10 dark:text-gray-300",
                   ].join(" ")}
                 >
@@ -291,6 +315,70 @@ export default function NewPlan() {
         {/* iOS home indicator spacing */}
         <div className="h-4" />
       </div>
+
+      {/* ── Always-at-home review modal ── */}
+      {showReviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-background-dark rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-[#111812] dark:text-white mb-1">
+              Still have these at home?
+            </h3>
+            <p className="text-sm text-[#618968] mb-4">
+              You've had these items marked "always at home" for 7 plans. Are they still available?
+            </p>
+
+            <div className="flex flex-wrap gap-2 mb-6">
+              {reviewItems.map((item) => (
+                <span
+                  key={item}
+                  className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-semibold"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={reviewLoading}
+                onClick={async () => {
+                  setReviewLoading(true);
+                  try {
+                    for (const item of reviewItems) {
+                      await groceryService.resetAtHomeCounter(item);
+                    }
+                  } finally {
+                    setShowReviewModal(false);
+                    navigate(`/week-plan/${generatedPlanId}`);
+                  }
+                }}
+                className="flex-1 bg-primary text-white font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                Yes, still have them
+              </button>
+              <button
+                type="button"
+                disabled={reviewLoading}
+                onClick={async () => {
+                  setReviewLoading(true);
+                  try {
+                    for (const item of reviewItems) {
+                      await groceryService.removeFromAtHome(item);
+                    }
+                  } finally {
+                    setShowReviewModal(false);
+                    navigate(`/week-plan/${generatedPlanId}`);
+                  }
+                }}
+                className="flex-1 border border-red-400 text-red-500 font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                No, remove them
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

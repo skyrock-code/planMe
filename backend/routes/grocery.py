@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models import (
     MealPlan,
@@ -179,9 +180,20 @@ def generate_grocery_list(plan_id):
     db.session.commit()
 
     # ─────────────────────────────────────
-    # SAVE ITEMS
+    # SAVE ITEMS (skip ingredients the user has always at home)
     # ─────────────────────────────────────
+    user_at_home = {
+        ui.ingredient_name.lower()
+        for ui in UserIngredient.query.filter_by(
+            user_id=plan.user_id,
+            always_at_home=True,
+        ).all()
+    }
+
     for ingredient_id, data in grocery_map.items():
+
+        if data["name"].lower() in user_at_home:
+            continue
 
         item = GroceryListItem(
             list_id=grocery_list.list_id,
@@ -346,21 +358,50 @@ def remove_item(item_id):
 # so excluded items are not counted.
 # ─────────────────────────────────────────
 @grocery_bp.route("/item/<int:item_id>/toggle-home", methods=["PATCH"])
+@jwt_required()
 def toggle_always_at_home(item_id):
 
     item = GroceryListItem.query.get(item_id)
-
     if not item:
         return jsonify({"error": "Item not found"}), 404
 
-    item.always_at_home = not item.always_at_home
+    current_user_id = int(get_jwt_identity())
+
+    ingredient_name = (
+        item.custom_name if item.is_custom else item.ingredient.name
+    )
+
+    user_ingredient = UserIngredient.query.filter_by(
+        user_id=current_user_id,
+        ingredient_name=ingredient_name,
+    ).first()
+
+    if not user_ingredient:
+        user_ingredient = UserIngredient(
+            user_id=current_user_id,
+            ingredient_name=ingredient_name,
+            unit=item.unit,
+            estimated_price=item.unit_price,
+            always_at_home=False,
+            plan_counter=0,
+        )
+        db.session.add(user_ingredient)
+        db.session.flush()
+
+    user_ingredient.always_at_home = not user_ingredient.always_at_home
+    if user_ingredient.always_at_home:
+        user_ingredient.plan_counter = 0
+
+    item.user_ingredient_id = user_ingredient.id
+    item.always_at_home = user_ingredient.always_at_home
     db.session.commit()
 
     recalculate_total(item.grocery_list)
 
     return jsonify({
         "item_id":        item.item_id,
-        "always_at_home": item.always_at_home,
+        "always_at_home": user_ingredient.always_at_home,
+        "plan_counter":   user_ingredient.plan_counter,
         "new_total":      item.grocery_list.total_price,
     }), 200
 
@@ -381,85 +422,80 @@ def add_custom_ingredient(list_id):
 
     data = request.get_json()
 
-    required_fields = [
-        "name",
-        "unit_price",
-        "quantity"
-    ]
+    saved_to_profile = False
 
-    if not all(data.get(f) for f in required_fields):
+    # ── Path A: DB ingredient (ingredient_id + quantity) ─────────────────
+    if data.get("ingredient_id"):
+        from models import Ingredient as IngModel
+        ing = IngModel.query.get(int(data["ingredient_id"]))
+        if not ing:
+            return jsonify({"error": "Ingredient not found"}), 404
+        if not data.get("quantity") or float(data["quantity"]) <= 0:
+            return jsonify({"error": "quantity is required and must be > 0"}), 400
 
-        return jsonify({
-            "error":
-                "name, unit_price and quantity are required"
-        }), 400
+        quantity    = float(data["quantity"])
+        unit_price  = ing.unit_price_xaf
+        total_price = round(quantity * unit_price, 2)
 
-    # Convert to float explicitly — JSON values may arrive as strings
-    quantity    = float(data["quantity"])
-    unit_price  = float(data["unit_price"])
-    total_price = round(quantity * unit_price, 2)
+        item = GroceryListItem(
+            list_id       = list_id,
+            ingredient_id = ing.id,
+            custom_name   = None,
+            quantity      = quantity,
+            unit          = ing.market_unit,
+            unit_price    = unit_price,
+            total_price   = total_price,
+            is_custom     = False,
+        )
 
-    # Add custom item
-    item = GroceryListItem(
+    # ── Path B: Custom item (name + unit_price + quantity) ────────────────
+    else:
+        required_fields = ["name", "unit_price", "quantity"]
+        if not all(data.get(f) for f in required_fields):
+            return jsonify({
+                "error": "name, unit_price and quantity are required"
+            }), 400
 
-        list_id=list_id,
+        # Convert to float explicitly — JSON values may arrive as strings
+        quantity    = float(data["quantity"])
+        unit_price  = float(data["unit_price"])
+        total_price = round(quantity * unit_price, 2)
 
-        ingredient_id=None,
+        item = GroceryListItem(
+            list_id       = list_id,
+            ingredient_id = None,
+            custom_name   = data["name"],
+            quantity      = quantity,
+            unit          = data.get("unit"),
+            unit_price    = unit_price,
+            total_price   = total_price,
+            is_custom     = True,
+        )
 
-        custom_name=data["name"],
-
-        quantity=quantity,
-
-        unit=data.get("unit"),
-
-        unit_price=unit_price,
-
-        total_price=total_price,
-
-        is_custom=True,
-    )
+        # Save to user's personal ingredients (custom path only)
+        if data.get("save_to_profile") and data.get("user_id"):
+            existing = UserIngredient.query.filter_by(
+                user_id         = data["user_id"],
+                ingredient_name = data["name"],
+            ).first()
+            if not existing:
+                db.session.add(UserIngredient(
+                    user_id         = data["user_id"],
+                    ingredient_name = data["name"],
+                    unit            = data.get("unit"),
+                    estimated_price = unit_price,
+                ))
+                saved_to_profile = True
 
     db.session.add(item)
     db.session.commit()
 
     recalculate_total(grocery_list)
 
-    # Save to user's personal ingredients
-    saved_to_profile = False
-
-    if data.get("save_to_profile") and data.get("user_id"):
-
-        existing = UserIngredient.query.filter_by(
-            user_id=data["user_id"],
-            ingredient_name=data["name"]
-        ).first()
-
-        if not existing:
-
-            saved = UserIngredient(
-
-                user_id=data["user_id"],
-
-                ingredient_name=data["name"],
-
-                unit=data.get("unit"),
-
-                estimated_price=unit_price,
-            )
-
-            db.session.add(saved)
-            db.session.commit()
-
-            saved_to_profile = True
-
     return jsonify({
-
-        "message": "Custom ingredient added",
-
-        "item_id": item.item_id,
-
+        "message":          "Ingredient added",
+        "item_id":          item.item_id,
         "saved_to_profile": saved_to_profile,
-
     }), 201
 
 
@@ -510,4 +546,61 @@ def delete_personal_ingredient(id):
 
     return jsonify({
         "message": "Saved ingredient removed"
+    }), 200
+
+
+# ─────────────────────────────────────────
+# RESET AT-HOME COUNTER (stays at home for another 7 plans)
+# POST /api/grocery/reset-at-home/<ingredient_name>
+# ─────────────────────────────────────────
+@grocery_bp.route("/reset-at-home/<string:ingredient_name>", methods=["POST"])
+@jwt_required()
+def reset_at_home_counter(ingredient_name):
+
+    current_user_id = int(get_jwt_identity())
+
+    user_ingredient = UserIngredient.query.filter_by(
+        user_id=current_user_id,
+        ingredient_name=ingredient_name,
+        always_at_home=True,
+    ).first()
+
+    if not user_ingredient:
+        return jsonify({"error": "Ingredient not found"}), 404
+
+    user_ingredient.plan_counter = 0
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": f"Counter reset for {ingredient_name}",
+    }), 200
+
+
+# ─────────────────────────────────────────
+# REMOVE FROM AT-HOME (add back to grocery lists)
+# DELETE /api/grocery/remove-at-home/<ingredient_name>
+# ─────────────────────────────────────────
+@grocery_bp.route("/remove-at-home/<string:ingredient_name>", methods=["DELETE"])
+@jwt_required()
+def remove_from_at_home(ingredient_name):
+
+    current_user_id = int(get_jwt_identity())
+
+    user_ingredient = UserIngredient.query.filter_by(
+        user_id=current_user_id,
+        ingredient_name=ingredient_name,
+        always_at_home=True,
+    ).first()
+
+    if not user_ingredient:
+        return jsonify({"error": "Ingredient not found"}), 404
+
+    user_ingredient.always_at_home = False
+    user_ingredient.plan_counter = 0
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": f"{ingredient_name} removed from always-at-home",
     }), 200

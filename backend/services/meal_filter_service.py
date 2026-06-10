@@ -20,7 +20,7 @@ class MealFilterService:
     # budget_per_meal — when provided, also drops
     # meals whose single-cook cost exceeds it.
     # ─────────────────────────────────────────
-    def get_eligible_meals(self, user_id, budget_per_meal=None):
+    def get_eligible_meals(self, user_id, budget_per_meal=None, extra_prefs=None):
         """
         Returns a list of Meal objects eligible for the given user.
 
@@ -30,7 +30,10 @@ class MealFilterService:
                              (skipped if the user has no diet preferences;
                               falls back to allergy-safe pool if no meals
                               match so the user always gets a result)
-        3. Budget filter   — remove meals exceeding budget_per_meal
+        3. Preference filter — when extra_prefs is provided (e.g. chip selections),
+                               narrow to meals matching those tags; silently falls
+                               back to step-2 result when nothing matches
+        4. Budget filter   — remove meals exceeding budget_per_meal
                              (only applied when budget_per_meal is given)
         """
         user = User.query.get(user_id)
@@ -62,7 +65,17 @@ class MealFilterService:
             if diet_filtered:
                 safe_meals = diet_filtered
 
-        # ── 3. Budget filter (optional) ───────────────────────────────
+        # ── 3. Preference filter (extra chips from session) ───────────
+        if extra_prefs:
+            pref_set = {p.lower() for p in extra_prefs}
+            pref_filtered = [
+                m for m in safe_meals
+                if any(tag.diet_type.lower() in pref_set for tag in m.diet_tags)
+            ]
+            if pref_filtered:
+                safe_meals = pref_filtered
+
+        # ── 4. Budget filter (optional) ───────────────────────────────
         if budget_per_meal is not None:
             safe_meals = [
                 m for m in safe_meals
@@ -108,6 +121,7 @@ class MealFilterService:
         cooking_frequency,
         start_date=None,
         end_date=None,
+        extra_prefs=None,
     ):
         """
         Generates a meal schedule for the given user and budget.
@@ -120,6 +134,8 @@ class MealFilterService:
                                       every_2_days | every_3_days | flexible
         start_date        : date    — defaults to today
         end_date          : date    — defaults to start_date + 6 days (7-day plan)
+        extra_prefs       : list    — optional preference chip values to narrow meal
+                                      selection (e.g. ["vegetarian", "spicy"])
 
         Returns
         -------
@@ -141,7 +157,7 @@ class MealFilterService:
         if end_date is None:
             end_date = start_date + timedelta(days=6)
 
-        eligible_meals = self.get_eligible_meals(user_id)
+        eligible_meals = self.get_eligible_meals(user_id, extra_prefs=extra_prefs)
         if not eligible_meals:
             return []
 
