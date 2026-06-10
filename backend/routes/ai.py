@@ -1,281 +1,138 @@
-import json
-import re
-from datetime import datetime, timedelta
-
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime
 
 from extensions import db
 from models import MealPlan, MealPlanMeal, User
 from services.meal_filter_service import MealFilterService
+from services.ai_intent_service import AIIntentService
 
 ai_bp = Blueprint("ai", __name__)
 
 
 # ─────────────────────────────────────────
-# HELPER: call AI model
-#
-# Isolated so the provider can be swapped
-# without touching the route logic.
+# AI GENERATE PLAN FROM NATURAL LANGUAGE
+# POST /api/ai/generate-from-prompt
 # ─────────────────────────────────────────
-def call_ai_model(system_prompt: str, user_message: str, max_tokens: int = 1024) -> str:
-    """
-    Sends a chat-completion request to Qwen/Qwen2.5-7B-Instruct
-    via the Hugging Face Inference API.
-
-    Returns the raw model response string.
-    Raises RuntimeError when HF_TOKEN is absent.
-    Raises any huggingface_hub exception on network/API failure.
-    """
-    from huggingface_hub import InferenceClient
-
-    token = current_app.config.get("HF_TOKEN", "")
-    if not token:
-        raise RuntimeError(
-            "HF_TOKEN is not configured on the server. "
-            "Set the HF_TOKEN environment variable."
-        )
-
-    client = InferenceClient(
-        model="Qwen/Qwen2.5-7B-Instruct",
-        token=token,
-    )
-
-    response = client.chat_completion(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_message},
-        ],
-        max_tokens=max_tokens,
-    )
-
-    return response.choices[0].message.content
-
-
-# ─────────────────────────────────────────
-# HELPER: strip markdown fences
-# ─────────────────────────────────────────
-def strip_markdown_fences(text: str) -> str:
-    """Remove ```json ... ``` or ``` ... ``` wrappers from model output."""
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s*```$", "", text)
-    return text.strip()
-
-
-# ─────────────────────────────────────────
-# AI GENERATE MEAL PLAN
-# POST /api/ai/generate-plan
-# ─────────────────────────────────────────
-@ai_bp.route("/generate-plan", methods=["POST"])
+@ai_bp.route("/generate-from-prompt", methods=["POST"])
 @jwt_required()
-def ai_generate_plan():
-    # JWT identity is stored as str(user_id) — cast when comparing
+def generate_plan_from_prompt():
+    """
+    Generates a meal plan from natural language input.
+
+    Request body:
+    {
+      "user_id":           int,
+      "prompt":            str,
+      "total_budget":      float,
+      "start_date":        "YYYY-MM-DD",
+      "end_date":          "YYYY-MM-DD",
+      "cooking_frequency": str (optional, defaults to "every_2_days")
+    }
+
+    Response:
+    {
+      "message":     str,
+      "plan_id":     int,
+      "ai_used":     bool,  (true if AI selected meals, false if fallback)
+      "grocery_url": str
+    }
+    """
     current_user_id = int(get_jwt_identity())
+    data = request.get_json() or {}
 
-    data    = request.get_json() or {}
-    plan_id = data.get("plan_id")
-    prompt  = (data.get("prompt") or "").strip()
+    # ── Validate input ────────────────────────────────────────────
+    required = ["user_id", "prompt", "total_budget", "start_date", "end_date"]
+    if not all(data.get(f) for f in required):
+        return jsonify({"error": "Missing required fields"}), 400
 
-    if not plan_id:
-        return jsonify({"error": "plan_id is required"}), 400
-    if not prompt:
-        return jsonify({"error": "prompt is required"}), 400
+    # Verify user is requesting their own plan
+    if data["user_id"] != current_user_id:
+        return jsonify({"error": "Access denied"}), 403
 
-    # ── Verify plan exists and belongs to this user ──────────────────
-    plan = MealPlan.query.get(plan_id)
-    if not plan:
-        return jsonify({"error": "Meal plan not found"}), 404
-    if plan.user_id != current_user_id:
-        return jsonify({"error": "Access denied — this plan belongs to another user"}), 403
+    user = User.query.get(data["user_id"])
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
-    # ── Step 1: Build safe meal list ─────────────────────────────────
-    service    = MealFilterService()
-    safe_meals = service.get_eligible_meals(plan.user_id)
+    # Parse dates
+    try:
+        start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+        end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
 
+    if end_date <= start_date:
+        return jsonify({"error": "end_date must be after start_date"}), 400
+
+    total_budget = float(data["total_budget"])
+    prompt = data["prompt"].strip()
+    cooking_frequency = data.get("cooking_frequency", "every_2_days")
+
+    # ── STEP 1: Create the MealPlan record ────────────────────────
+    plan = MealPlan(
+        user_id=data["user_id"],
+        start_date=start_date,
+        end_date=end_date,
+        total_budget=total_budget,
+        cooking_frequency=cooking_frequency,
+    )
+    db.session.add(plan)
+    db.session.commit()
+
+    # ── STEP 2: Get safe meals (allergies/diets filtered) ─────────
+    service = MealFilterService()
+    safe_meals = service.get_eligible_meals(data["user_id"])
     if not safe_meals:
+        db.session.delete(plan)
+        db.session.commit()
         return jsonify({
-            "error": (
-                "No meals are available for your dietary profile. "
-                "Please update your allergy or diet settings."
-            )
+            "error": "No meals available matching your dietary profile"
         }), 400
 
-    safe_meal_ids = {m.meal_id for m in safe_meals}
-
-    safe_meals_payload = []
-    for meal in safe_meals:
-        base_cost = service.estimate_meal_cost(meal.meal_id, plan.user_id)
-        safe_meals_payload.append({
-            "meal_id":          meal.meal_id,
-            "meal_name":        meal.meal_name,
-            "total_cost_xaf":   base_cost,
-            "cost_per_serving": round(base_cost / meal.servings, 2) if meal.servings else base_cost,
-            "servings":         meal.servings,
-        })
-
-    # ── Step 2: Build context and call the model ──────────────────────
-    user       = User.query.get(plan.user_id)
-    household_size = getattr(user, 'household_size', 4) or 4 if user else 4
-    diet_prefs = [ud.diet_type for ud in user.diets] if user else []
-    total_days = (plan.end_date - plan.start_date).days + 1
-
-    system_prompt = (
-        "You are a meal planning assistant for Cameroonian home cooks. "
-        "Respond only with valid JSON. No explanation, no markdown, raw JSON only."
-    )
-
-    user_message = (
-        f"Budget: {plan.total_budget} XAF\n"
-        f"Household size: {household_size} people\n"
-        f"Start date: {plan.start_date}\n"
-        f"End date: {plan.end_date}\n"
-        f"Total days: {total_days}\n"
-        f"Diet preferences: {', '.join(diet_prefs) if diet_prefs else 'none'}\n"
-        f"User request: {prompt}\n\n"
-        "Rules:\n"
-        "- Assign one meal per cooking session.\n"
-        "- A meal can cover 1–3 consecutive days (duration_days).\n"
-        "- No two meals may overlap on the same date.\n"
-        f"- All start_date values must be within {plan.start_date} and {plan.end_date}.\n"
-        "- Each meal must have a different start_date.\n"
-        "- The total cost (sum of total_cost_xaf × duration_days per meal) "
-        "should not exceed the budget.\n"
-        "- All costs are already scaled for the household size.\n\n"
-        "Available meals:\n"
-        f"{json.dumps(safe_meals_payload, ensure_ascii=False)}\n\n"
-        "Respond with this exact JSON structure, nothing else:\n"
-        '{"plan": [{"meal_id": <int>, "meal_name": <str>, '
-        '"start_date": "YYYY-MM-DD", "duration_days": <int>}], '
-        '"total_cost_xaf": <float>, "reasoning": <str>}'
-    )
-
-    ai_data      = None
-    fallback_reason = None
-
+    # ── STEP 3: Call AI to get preferred meal_ids ─────────────────
+    preferred_meal_ids = None
+    ai_used = False
     try:
-        raw_response = call_ai_model(system_prompt, user_message, max_tokens=1024)
-
-        # ── Step 3: Parse and validate ────────────────────────────────
-        cleaned = strip_markdown_fences(raw_response)
-        ai_data = json.loads(cleaned)
-
-        if "plan" not in ai_data or not isinstance(ai_data["plan"], list):
-            raise ValueError('Model response missing "plan" array')
-
-        validation_errors = []
-        occupied_days: set = set()
-
-        for idx, item in enumerate(ai_data["plan"]):
-            label = f"plan[{idx}]"
-
-            mid = item.get("meal_id")
-            if not isinstance(mid, int) or mid not in safe_meal_ids:
-                validation_errors.append(f"{label}: meal_id {mid!r} not in safe meals")
-                continue
-
-            dur = item.get("duration_days", 1)
-            if not isinstance(dur, int) or not (1 <= dur <= 3):
-                validation_errors.append(f"{label}: duration_days must be 1–3, got {dur!r}")
-                continue
-
-            try:
-                slot_start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
-            except (KeyError, ValueError):
-                validation_errors.append(f"{label}: invalid or missing start_date")
-                continue
-
-            if not (plan.start_date <= slot_start <= plan.end_date):
-                validation_errors.append(
-                    f"{label}: start_date {slot_start} outside plan range"
-                )
-                continue
-
-            slot_days = {slot_start + timedelta(days=i) for i in range(dur)}
-            overlap   = slot_days & occupied_days
-            if overlap:
-                validation_errors.append(f"{label}: date overlap on {sorted(str(d) for d in overlap)}")
-                continue
-
-            occupied_days |= slot_days
-
-        ai_total = float(ai_data.get("total_cost_xaf", 0))
-        if ai_total > plan.total_budget * 1.05:
-            validation_errors.append(
-                f"total_cost_xaf {ai_total:.2f} exceeds budget {plan.total_budget * 1.05:.2f}"
-            )
-
-        if validation_errors:
-            raise ValueError(f"Validation failed: {validation_errors}")
-
+        ai_service = AIIntentService()
+        preferred_meal_ids = ai_service.select_meals(prompt, safe_meals)
+        if preferred_meal_ids:
+            ai_used = True
     except Exception as exc:
-        # AI call failed or response was invalid — fall back to rule-based
-        print(f"[ai.py] AI generation failed, using rule-based fallback: {exc}")
-        fallback_reason = str(exc)
-        ai_data = None
+        print(f"[ai.py] AI meal selection failed: {exc}")
+        preferred_meal_ids = None
 
-    # ── Step 4: Persist ───────────────────────────────────────────────
-    MealPlanMeal.query.filter_by(plan_id=plan_id).delete(synchronize_session=False)
-    db.session.flush()
+    # ── STEP 4: Schedule using rule-based planner ─────────────────
+    schedule = service.generate_weekly_plan(
+        user_id=data["user_id"],
+        budget=total_budget,
+        cooking_frequency=cooking_frequency,
+        start_date=start_date,
+        end_date=end_date,
+        preferred_meal_ids=preferred_meal_ids,
+    )
 
-    if ai_data:
-        # AI succeeded — persist AI-chosen meals
-        for item in ai_data["plan"]:
-            slot_start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
-            db.session.add(MealPlanMeal(
-                plan_id       = plan_id,
-                meal_id       = item["meal_id"],
-                start_date    = slot_start,
-                duration_days = item["duration_days"],
-            ))
+    if not schedule:
+        db.session.delete(plan)
         db.session.commit()
-
-        ai_total = float(ai_data.get("total_cost_xaf", 0))
         return jsonify({
-            "message":        "Meal plan generated successfully",
-            "plan_id":        plan_id,
-            "total_cost_xaf": ai_total,
-            "within_budget":  ai_total <= plan.total_budget,
-            "budget_xaf":     plan.total_budget,
-            "reasoning":      ai_data.get("reasoning", ""),
-            "meals":          ai_data["plan"],
-        }), 201
+            "error": "Could not schedule meals. Try a higher budget or fewer restrictions."
+        }), 400
 
-    else:
-        # Parse session preference chips from the prompt when AI is unavailable.
-        # Prompt format from frontend: "User prefers: vegetarian, spicy" (comma-separated)
-        extra_prefs = []
-        if prompt.lower().startswith("user prefers:"):
-            raw = prompt[len("user prefers:"):].strip()
-            extra_prefs = [p.strip() for p in raw.split(",") if p.strip()]
+    # ── STEP 5: Persist MealPlanMeal records ──────────────────────
+    for slot in schedule:
+        db.session.add(MealPlanMeal(
+            plan_id=plan.plan_id,
+            meal_id=slot["meal_id"],
+            start_date=slot["date"],
+            duration_days=slot["duration_days"],
+        ))
 
-        # Fallback: use MealFilterService rule-based schedule, honouring chip prefs
-        schedule = service.generate_weekly_plan(
-            user_id           = plan.user_id,
-            budget            = plan.total_budget,
-            cooking_frequency = plan.cooking_frequency or "every_2_days",
-            start_date        = plan.start_date,
-            end_date          = plan.end_date,
-            extra_prefs       = extra_prefs or None,
-        )
+    db.session.commit()
 
-        for slot in schedule:
-            db.session.add(MealPlanMeal(
-                plan_id       = plan_id,
-                meal_id       = slot["meal_id"],
-                start_date    = slot["date"],
-                duration_days = slot["duration_days"],
-            ))
-        db.session.commit()
-
-        return jsonify({
-            "message":        "Meal plan generated (AI unavailable — rule-based fallback used)",
-            "plan_id":        plan_id,
-            "total_cost_xaf": 0,
-            "within_budget":  True,
-            "reasoning":      f"Fallback reason: {fallback_reason}",
-            "meals":          [
-                {"meal_id": s["meal_id"], "start_date": str(s["date"]), "duration_days": s["duration_days"]}
-                for s in schedule
-            ],
-        }), 201
+    # ── STEP 6: Return response ───────────────────────────────────
+    return jsonify({
+        "message": "AI meal plan generated",
+        "plan_id": plan.plan_id,
+        "ai_used": ai_used,
+        "grocery_url": f"/api/grocery/{plan.plan_id}",
+    }), 201

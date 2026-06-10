@@ -161,6 +161,7 @@ class MealFilterService:
         start_date=None,
         end_date=None,
         extra_prefs=None,
+        preferred_meal_ids=None,
     ):
         """
         Generates a meal schedule for the given user and budget.
@@ -175,6 +176,8 @@ class MealFilterService:
         end_date          : date    — defaults to start_date + 6 days (7-day plan)
         extra_prefs       : list    — optional preference chip values to narrow meal
                                       selection (e.g. ["vegetarian", "spicy"])
+        preferred_meal_ids : list   — optional meal_ids preferred by AI or user
+                                      (meals are prioritized but fallback pool remains)
 
         Returns
         -------
@@ -199,6 +202,13 @@ class MealFilterService:
         eligible_meals = self.get_eligible_meals(user_id, extra_prefs=extra_prefs)
         if not eligible_meals:
             return []
+
+        # Prioritize preferred meals if provided by AI
+        if preferred_meal_ids:
+            preferred_set = set(preferred_meal_ids)
+            preferred = [m for m in eligible_meals if m.meal_id in preferred_set]
+            others = [m for m in eligible_meals if m.meal_id not in preferred_set]
+            eligible_meals = preferred + others
 
         # Precompute single-cook costs to avoid repeated DB queries per slot
         base_costs = {

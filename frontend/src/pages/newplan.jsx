@@ -11,10 +11,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import planService from "../services/planService";
+import aiService from "../services/aiService";
 import groceryService from "../services/groceryService";
 import TopAppBar from "../components/layout/TopAppBar";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
+import AIPromptSelector from "../components/ui/AIPromptSelector";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -62,6 +64,8 @@ export default function NewPlan() {
   const [servings, setServings]       = useState("1");
   const [frequency, setFrequency]     = useState("every_2_days");
   const [selectedPrefs, setSelectedPrefs] = useState([]);
+  const [planMode, setPlanMode]       = useState("standard"); // "standard" or "ai"
+  const [aiPrompt, setAiPrompt]       = useState("");
 
   // ── API state ──
   const [error, setError] = useState("");
@@ -105,8 +109,8 @@ export default function NewPlan() {
    */
   async function handleGenerate() {
     // Validate required fields
-    if (!budget || !servings) {
-      setError("Please fill in all required fields.");
+    if (!budget) {
+      setError("Please fill in budget.");
       return;
     }
 
@@ -121,41 +125,66 @@ export default function NewPlan() {
 
       const { start_date, end_date } = getPlanDates(duration);
 
-      const prompt =
-        selectedPrefs.length > 0
-          ? `User prefers: ${selectedPrefs.join(", ")}`
-          : `Create a ${duration.toLowerCase()} meal plan with budget ${budget} XAF for ${servings} people`;
+      if (planMode === "standard") {
+        // Standard path: chips-based planning
+        if (!servings) {
+          setError("Please fill in number of servings.");
+          return;
+        }
 
-      // Step 1: Create plan record + get plan_id (also increments at-home counters)
-      const planData = {
-        user_id: user.id,
-        start_date,
-        end_date,
-        budget: parseFloat(budget),
-        servings: parseInt(servings, 10),
-        cooking_frequency: frequency,
-      };
+        const prompt =
+          selectedPrefs.length > 0
+            ? `User prefers: ${selectedPrefs.join(", ")}`
+            : `Create a ${duration.toLowerCase()} meal plan with budget ${budget} XAF for ${servings} people`;
 
-      const newPlan = await planService.createPlan(planData);
+        // Step 1: Create plan record + get plan_id (also increments at-home counters)
+        const planData = {
+          user_id: user.id,
+          start_date,
+          end_date,
+          budget: parseFloat(budget),
+          servings: parseInt(servings, 10),
+          cooking_frequency: frequency,
+        };
 
-      if (!newPlan.plan_id) {
-        throw new Error("Failed to create plan — no plan_id returned.");
-      }
+        const newPlan = await planService.createPlan(planData);
 
-      setGeneratedPlanId(newPlan.plan_id);
+        if (!newPlan.plan_id) {
+          throw new Error("Failed to create plan — no plan_id returned.");
+        }
 
-      // Step 2: Fill the plan with AI-selected meals (falls back to rule-based)
-      await planService.generateAIPlan({
-        plan_id: newPlan.plan_id,
-        prompt,
-      });
+        setGeneratedPlanId(newPlan.plan_id);
 
-      // Show always-at-home review modal if triggered by plan creation
-      if (newPlan.needs_review && newPlan.needs_review.length > 0) {
-        setReviewItems(newPlan.needs_review);
-        setShowReviewModal(true);
+        // Step 2: Fill the plan with AI-selected meals (falls back to rule-based)
+        await planService.generateAIPlan({
+          plan_id: newPlan.plan_id,
+          prompt,
+        });
+
+        // Show always-at-home review modal if triggered by plan creation
+        if (newPlan.needs_review && newPlan.needs_review.length > 0) {
+          setReviewItems(newPlan.needs_review);
+          setShowReviewModal(true);
+        } else {
+          navigate(`/week-plan/${newPlan.plan_id}`);
+        }
       } else {
-        navigate(`/week-plan/${newPlan.plan_id}`);
+        // AI path: natural language planning
+        if (!aiPrompt) {
+          setError("Please select or describe what you feel like eating.");
+          return;
+        }
+
+        const response = await aiService.generateFromPrompt({
+          user_id: user.id,
+          prompt: aiPrompt,
+          budget: parseFloat(budget),
+          start_date,
+          end_date,
+          cooking_frequency: frequency,
+        });
+
+        navigate(`/week-plan/${response.plan_id}`);
       }
     } catch (err) {
       console.error("Plan generation error:", err);
@@ -207,6 +236,32 @@ export default function NewPlan() {
           </div>
         </div>
 
+        {/* ── Planning Mode toggle ── */}
+        <div className="pt-6">
+          <p className="text-[#111812] dark:text-white text-base font-semibold px-1 pb-3">
+            Planning Mode
+          </p>
+
+          {/* Segmented control — Standard / AI Assisted */}
+          <div className="flex h-12 w-full items-center justify-center rounded-full bg-gray-100 dark:bg-white/5 p-1">
+            {["Standard", "AI Assisted"].map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setPlanMode(option === "Standard" ? "standard" : "ai")}
+                className={[
+                  "flex-1 h-full rounded-full text-sm font-semibold transition-all",
+                  planMode === (option === "Standard" ? "standard" : "ai")
+                    ? "bg-white dark:bg-white/20 shadow-sm text-[#111812] dark:text-white"
+                    : "text-[#618968]",
+                ].join(" ")}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── Budget field ── */}
         <div className="pt-8">
           <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-3">
@@ -224,23 +279,25 @@ export default function NewPlan() {
           />
         </div>
 
-        {/* ── Servings field ── */}
-        <div className="pt-8">
-          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
-            Number of Servings
-          </h3>
-          <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-3">
-            How many people are you cooking for?
-          </p>
-          <Input
-            placeholder="e.g. 2"
-            type="number"
-            shape="box"
-            value={servings}
-            onChange={(e) => setServings(e.target.value)}
-            min="1"
-          />
-        </div>
+        {/* ── Servings field (Standard mode only) ── */}
+        {planMode === "standard" && (
+          <div className="pt-8">
+            <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
+              Number of Servings
+            </h3>
+            <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-3">
+              How many people are you cooking for?
+            </p>
+            <Input
+              placeholder="e.g. 2"
+              type="number"
+              shape="box"
+              value={servings}
+              onChange={(e) => setServings(e.target.value)}
+              min="1"
+            />
+          </div>
+        )}
 
         {/* ── Cooking Frequency dropdown ── */}
         <div className="pt-8">
@@ -263,34 +320,51 @@ export default function NewPlan() {
           </p>
         </div>
 
-        {/* ── Meal Preferences chips ── */}
+        {/* ── Meal Preferences (Standard mode) OR AI Prompt (AI mode) ── */}
         <div className="pt-8 pb-8">
-          <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
-            Meal Preferences
-          </h3>
-          <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-4">
-            Select what applies to you this week
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {PREFERENCE_CHIPS.map((chip) => {
-              const selected = selectedPrefs.includes(chip.value);
-              return (
-                <button
-                  key={chip.value}
-                  type="button"
-                  onClick={() => handleChipToggle(chip.value)}
-                  className={[
-                    "px-4 py-2 rounded-full text-sm font-semibold border transition-all",
-                    selected
-                      ? "bg-primary text-white border-primary"
-                      : "bg-transparent text-[#618968] border-[#dbe6dd] dark:border-white/10 dark:text-gray-300",
-                  ].join(" ")}
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-          </div>
+          {planMode === "standard" ? (
+            <>
+              <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
+                Meal Preferences
+              </h3>
+              <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-4">
+                Select what applies to you this week
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {PREFERENCE_CHIPS.map((chip) => {
+                  const selected = selectedPrefs.includes(chip.value);
+                  return (
+                    <button
+                      key={chip.value}
+                      type="button"
+                      onClick={() => handleChipToggle(chip.value)}
+                      className={[
+                        "px-4 py-2 rounded-full text-sm font-semibold border transition-all",
+                        selected
+                          ? "bg-primary text-white border-primary"
+                          : "bg-transparent text-[#618968] border-[#dbe6dd] dark:border-white/10 dark:text-gray-300",
+                      ].join(" ")}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="text-[#111812] dark:text-white text-lg font-bold leading-tight tracking-tight pb-1">
+                What are you in the mood for?
+              </h3>
+              <p className="text-[#618968] dark:text-gray-400 text-sm font-medium pb-4">
+                Describe what you'd like to eat this week
+              </p>
+              <AIPromptSelector
+                selectedPrompt={aiPrompt}
+                onSelect={setAiPrompt}
+              />
+            </>
+          )}
         </div>
       </div>
 
