@@ -15,9 +15,9 @@ import { useState } from "react";
  * These match the exact colors defined in tailwind.config.js.
  */
 const VARIANTS = {
-  /** Main call-to-action — solid green background with dark text */
+  /** Main call-to-action — solid forest green background with white text */
   primary:
-    "bg-primary text-[#111812] shadow-lg shadow-primary/30 hover:bg-[#22d940] active:bg-[#1ec435]",
+    "bg-primary text-white shadow-lg shadow-black/20 hover:bg-primary-light active:bg-primary-dark",
 
   /** Secondary action — transparent with green border and text */
   outline:
