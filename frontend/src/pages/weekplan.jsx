@@ -174,18 +174,18 @@ export default function WeekPlan() {
 
         {/* Food background decoration */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
-          <svg className="absolute -top-8 -right-8 w-48 h-48 opacity-[0.06]" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="120" cy="80" rx="40" ry="70" stroke="currentColor" strokeWidth="6" className="text-primary" transform="rotate(-20 120 80)" />
-            <path d="M120 10 Q130 0 145 5 Q135 15 120 10Z" fill="currentColor" className="text-primary" />
+          <svg className="absolute -top-8 -right-8 w-64 h-64 opacity-[0.15]" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="120" cy="80" rx="40" ry="70" stroke="currentColor" strokeWidth="6" style={{ color: '#2d5a27' }} transform="rotate(-20 120 80)" />
+            <path d="M120 10 Q130 0 145 5 Q135 15 120 10Z" fill="currentColor" style={{ color: '#2d5a27' }} />
           </svg>
-          <svg className="absolute bottom-32 -left-6 w-36 h-36 opacity-[0.05]" viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M20 130 Q10 80 40 50 Q70 20 100 40 Q80 70 60 90 Q40 110 20 130Z" stroke="currentColor" strokeWidth="5" fill="none" className="text-primary" />
-            <path d="M40 120 Q30 70 60 45 Q90 20 115 38" stroke="currentColor" strokeWidth="4" fill="none" className="text-primary" />
+          <svg className="absolute bottom-32 -left-6 w-52 h-52 opacity-[0.12]" viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 130 Q10 80 40 50 Q70 20 100 40 Q80 70 60 90 Q40 110 20 130Z" stroke="currentColor" strokeWidth="5" fill="none" style={{ color: '#2d5a27' }} />
+            <path d="M40 120 Q30 70 60 45 Q90 20 115 38" stroke="currentColor" strokeWidth="4" fill="none" style={{ color: '#2d5a27' }} />
           </svg>
-          <svg className="absolute top-1/2 -right-4 w-24 h-24 opacity-[0.05]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="50" cy="55" r="35" stroke="currentColor" strokeWidth="5" className="text-primary" />
-            <path d="M50 20 Q55 10 65 12 Q58 22 50 20Z" fill="currentColor" className="text-primary" />
-            <path d="M50 20 Q45 8 35 10 Q42 20 50 20Z" fill="currentColor" className="text-primary" />
+          <svg className="absolute top-1/2 -right-4 w-40 h-40 opacity-[0.12]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="55" r="35" stroke="currentColor" strokeWidth="5" style={{ color: '#2d5a27' }} />
+            <path d="M50 20 Q55 10 65 12 Q58 22 50 20Z" fill="currentColor" style={{ color: '#2d5a27' }} />
+            <path d="M50 20 Q45 8 35 10 Q42 20 50 20Z" fill="currentColor" style={{ color: '#2d5a27' }} />
           </svg>
         </div>
 

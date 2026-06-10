@@ -41,44 +41,44 @@ function FoodBackground() {
     <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
       {/* Top right — large pepper outline */}
       <svg
-        className="absolute -top-8 -right-8 w-48 h-48 opacity-[0.06]"
+        className="absolute -top-8 -right-8 w-64 h-64 opacity-[0.15]"
         viewBox="0 0 200 200" fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
         <ellipse cx="120" cy="80" rx="40" ry="70"
           stroke="currentColor" strokeWidth="6"
-          className="text-primary" transform="rotate(-20 120 80)" />
+          style={{ color: '#2d5a27' }} transform="rotate(-20 120 80)" />
         <path d="M120 10 Q130 0 145 5 Q135 15 120 10Z"
-          fill="currentColor" className="text-primary" />
+          fill="currentColor" style={{ color: '#2d5a27' }} />
       </svg>
 
       {/* Bottom left — plantain bunch outline */}
       <svg
-        className="absolute bottom-32 -left-6 w-36 h-36 opacity-[0.05]"
+        className="absolute bottom-32 -left-6 w-52 h-52 opacity-[0.12]"
         viewBox="0 0 150 150" fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
         <path d="M20 130 Q10 80 40 50 Q70 20 100 40 Q80 70 60 90 Q40 110 20 130Z"
           stroke="currentColor" strokeWidth="5" fill="none"
-          className="text-primary" />
+          style={{ color: '#2d5a27' }} />
         <path d="M40 120 Q30 70 60 45 Q90 20 115 38"
           stroke="currentColor" strokeWidth="4" fill="none"
-          className="text-primary" />
+          style={{ color: '#2d5a27' }} />
       </svg>
 
       {/* Center right — tomato circle */}
       <svg
-        className="absolute top-1/2 -right-4 w-24 h-24 opacity-[0.05]"
+        className="absolute top-1/2 -right-4 w-40 h-40 opacity-[0.12]"
         viewBox="0 0 100 100" fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
         <circle cx="50" cy="55" r="35"
           stroke="currentColor" strokeWidth="5"
-          className="text-primary" />
+          style={{ color: '#2d5a27' }} />
         <path d="M50 20 Q55 10 65 12 Q58 22 50 20Z"
-          fill="currentColor" className="text-primary" />
+          fill="currentColor" style={{ color: '#2d5a27' }} />
         <path d="M50 20 Q45 8 35 10 Q42 20 50 20Z"
-          fill="currentColor" className="text-primary" />
+          fill="currentColor" style={{ color: '#2d5a27' }} />
       </svg>
     </div>
   );
@@ -230,7 +230,7 @@ export default function Dashboard() {
               <p className="text-[#618968] dark:text-primary/80 text-sm font-medium">
                 Welcome back,
               </p>
-              <h1 className="text-4xl font-extrabold text-[#111812] dark:text-white leading-tight mt-0.5">
+              <h1 className="text-4xl font-extrabold text-[#111812] dark:text-white leading-tight mt-0.5 capitalize">
                 {user?.username || "Friend"}
               </h1>
               <p className="text-[#618968] dark:text-primary/70 text-sm mt-2">
@@ -241,7 +241,7 @@ export default function Dashboard() {
 
           {/* ── Summary Card ── */}
           <section className="px-4 mb-4">
-            <div className="bg-[#1a3a1e] rounded-2xl p-5">
+            <div className="bg-[#2d5a27] rounded-2xl p-5">
               <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-4">
                 Your Summary
               </p>
@@ -330,112 +330,120 @@ export default function Dashboard() {
           )}
 
           {/* ── This Week at a Glance ── */}
-          {weekDays.length > 0 && (
-            <section className="px-4 mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[#111812] dark:text-white text-base font-bold">
-                  This Week at a Glance
-                </h3>
-                <button
-                  type="button"
-                  onClick={() =>
-                    activePlan
-                      ? navigate(`/week-plan/${activePlan.plan_id}`)
-                      : navigate("/week-plan")
-                  }
-                  className="text-xs font-bold text-primary hover:underline"
+          {weekDays.length > 0 && (() => {
+            const glanceDays = weekDays
+              .filter((day) => getMealForDay(day.dateStr) !== null)
+              .slice(0, 3);
+
+            if (glanceDays.length === 0) return null;
+
+            return (
+              <section className="px-4 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[#111812] dark:text-white text-base font-bold">
+                    This Week at a Glance
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      activePlan
+                        ? navigate(`/week-plan/${activePlan.plan_id}`)
+                        : navigate("/week-plan")
+                    }
+                    className="text-xs font-bold text-primary hover:underline"
+                  >
+                    View full plan
+                  </button>
+                </div>
+
+                <div
+                  className="flex gap-2 overflow-x-auto pb-2"
+                  style={{ scrollbarWidth: "none" }}
                 >
-                  View full plan
-                </button>
-              </div>
+                  {glanceDays.map((day) => {
+                    const isToday   = day.dateStr === today;
+                    const dayMeal   = getMealForDay(day.dateStr);
+                    const mealImage = dayMeal ? getMealImage(dayMeal.meal_name) : null;
+                    const shortName =
+                      dayMeal
+                        ? dayMeal.meal_name.length > 8
+                          ? dayMeal.meal_name.slice(0, 8) + "…"
+                          : dayMeal.meal_name
+                        : null;
 
-              <div
-                className="flex gap-2 overflow-x-auto pb-2"
-                style={{ scrollbarWidth: "none" }}
-              >
-                {weekDays.map((day) => {
-                  const isToday   = day.dateStr === today;
-                  const dayMeal   = getMealForDay(day.dateStr);
-                  const mealImage = dayMeal ? getMealImage(dayMeal.meal_name) : null;
-                  const shortName =
-                    dayMeal
-                      ? dayMeal.meal_name.length > 8
-                        ? dayMeal.meal_name.slice(0, 8) + "…"
-                        : dayMeal.meal_name
-                      : null;
-
-                  return (
-                    <button
-                      key={day.dateStr}
-                      type="button"
-                      onClick={() =>
-                        activePlan
-                          ? navigate(`/week-plan/${activePlan.plan_id}`)
-                          : navigate("/week-plan")
-                      }
-                      className={[
-                        "flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl min-w-[60px] transition-all shrink-0",
-                        isToday
-                          ? "bg-[#1a3a1e] text-white shadow-md"
-                          : "bg-white dark:bg-[#1a2e1d] border border-gray-100 dark:border-gray-800",
-                      ].join(" ")}
-                    >
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wide ${
-                          isToday ? "text-white/70" : "text-[#618968]"
-                        }`}
+                    return (
+                      <button
+                        key={day.dateStr}
+                        type="button"
+                        onClick={() =>
+                          activePlan
+                            ? navigate(`/week-plan/${activePlan.plan_id}`)
+                            : navigate("/week-plan")
+                        }
+                        className={[
+                          "flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl min-w-[100px] transition-all shrink-0",
+                          isToday
+                            ? "bg-[#2d5a27] text-white shadow-md"
+                            : "bg-white dark:bg-[#1a2e1d] border border-gray-100 dark:border-gray-800",
+                        ].join(" ")}
                       >
-                        {day.short}
-                      </span>
-                      <span
-                        className={`text-sm font-extrabold ${
-                          isToday ? "text-white" : "text-[#111812] dark:text-white"
-                        }`}
-                      >
-                        {day.dateNum}
-                      </span>
-
-                      {/* Meal image or placeholder */}
-                      {mealImage ? (
-                        <img
-                          src={mealImage}
-                          alt={dayMeal.meal_name}
-                          className="w-12 h-12 rounded-full object-cover border-2 border-white/20"
-                        />
-                      ) : (
-                        <div
-                          className={[
-                            "w-12 h-12 rounded-full flex items-center justify-center border-2",
-                            isToday
-                              ? "border-white/20 bg-white/10"
-                              : "border-dashed border-gray-200 dark:border-gray-700",
-                          ].join(" ")}
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wide ${
+                            isToday ? "text-white/70" : "text-[#618968]"
+                          }`}
                         >
-                          <span
-                            className={`material-symbols-outlined text-sm ${
-                              isToday ? "text-white/50" : "text-gray-300 dark:text-gray-600"
-                            }`}
-                          >
-                            add
-                          </span>
-                        </div>
-                      )}
+                          {day.short}
+                        </span>
+                        <span
+                          className={`text-sm font-extrabold ${
+                            isToday ? "text-white" : "text-[#111812] dark:text-white"
+                          }`}
+                        >
+                          {day.dateNum}
+                        </span>
 
-                      {/* Meal name truncated */}
-                      <span
-                        className={`text-[9px] font-semibold text-center leading-tight max-w-full truncate ${
-                          isToday ? "text-white/80" : "text-[#618968]"
-                        }`}
-                        style={{ maxWidth: "56px" }}
-                      >
-                        {shortName ?? "—"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+                        {/* Meal image or placeholder */}
+                        {mealImage ? (
+                          <img
+                            src={mealImage}
+                            alt={dayMeal.meal_name}
+                            className="w-16 h-16 rounded-full object-cover border-2 border-white/20"
+                          />
+                        ) : (
+                          <div
+                            className={[
+                              "w-16 h-16 rounded-full flex items-center justify-center border-2",
+                              isToday
+                                ? "border-white/20 bg-white/10"
+                                : "border-dashed border-gray-200 dark:border-gray-700",
+                            ].join(" ")}
+                          >
+                            <span
+                              className={`material-symbols-outlined text-sm ${
+                                isToday ? "text-white/50" : "text-gray-300 dark:text-gray-600"
+                              }`}
+                            >
+                              add
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Meal name truncated */}
+                        <span
+                          className={`text-[9px] font-semibold text-center leading-tight max-w-full truncate ${
+                            isToday ? "text-white/80" : "text-[#618968]"
+                          }`}
+                          style={{ maxWidth: "96px" }}
+                        >
+                          {shortName ?? "—"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })()}
 
           {/* ── Quick Access Grid ── */}
           <section className="px-4 mb-4">
