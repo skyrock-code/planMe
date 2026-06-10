@@ -39,47 +39,45 @@ function getWeekDays(startDateStr) {
 function FoodBackground() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
-      {/* Top right — large pepper outline */}
-      <svg
-        className="absolute -top-8 -right-8 w-64 h-64 opacity-[0.15]"
-        viewBox="0 0 200 200" fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <ellipse cx="120" cy="80" rx="40" ry="70"
-          stroke="currentColor" strokeWidth="6"
-          style={{ color: '#2d5a27' }} transform="rotate(-20 120 80)" />
-        <path d="M120 10 Q130 0 145 5 Q135 15 120 10Z"
-          fill="currentColor" style={{ color: '#2d5a27' }} />
-      </svg>
 
-      {/* Bottom left — plantain bunch outline */}
-      <svg
-        className="absolute bottom-32 -left-6 w-52 h-52 opacity-[0.12]"
-        viewBox="0 0 150 150" fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path d="M20 130 Q10 80 40 50 Q70 20 100 40 Q80 70 60 90 Q40 110 20 130Z"
-          stroke="currentColor" strokeWidth="5" fill="none"
-          style={{ color: '#2d5a27' }} />
-        <path d="M40 120 Q30 70 60 45 Q90 20 115 38"
-          stroke="currentColor" strokeWidth="4" fill="none"
-          style={{ color: '#2d5a27' }} />
-      </svg>
+      {/* Top right — pepper */}
+      <div className="absolute -top-8 -right-8 w-64 h-64 opacity-20">
+        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="120" cy="80" rx="40" ry="70" stroke="#2d5a27" strokeWidth="4" fill="none" transform="rotate(-20 120 80)" />
+          <path d="M120 10 C125 0,140 -2,145 5 C140 12,130 15,120 10Z" fill="#2d5a27" />
+          <path d="M80 50 C60 40,50 60,55 80" stroke="#2d5a27" strokeWidth="3" fill="none" />
+        </svg>
+      </div>
 
-      {/* Center right — tomato circle */}
-      <svg
-        className="absolute top-1/2 -right-4 w-40 h-40 opacity-[0.12]"
-        viewBox="0 0 100 100" fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <circle cx="50" cy="55" r="35"
-          stroke="currentColor" strokeWidth="5"
-          style={{ color: '#2d5a27' }} />
-        <path d="M50 20 Q55 10 65 12 Q58 22 50 20Z"
-          fill="currentColor" style={{ color: '#2d5a27' }} />
-        <path d="M50 20 Q45 8 35 10 Q42 20 50 20Z"
-          fill="currentColor" style={{ color: '#2d5a27' }} />
-      </svg>
+      {/* Bottom left — plantain bunch */}
+      <div className="absolute bottom-20 -left-10 w-52 h-52 opacity-15">
+        <svg viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M30 130 C20 80,40 50,70 30 C100 10,120 30,110 60 C90 80,70 100,50 120 C40 125,35 128,30 130Z" stroke="#2d5a27" strokeWidth="5" fill="none" />
+          <path d="M50 120 C40 70,60 45,85 30" stroke="#2d5a27" strokeWidth="4" fill="none" />
+          <path d="M70 110 C60 60,80 40,105 25" stroke="#2d5a27" strokeWidth="3" fill="none" />
+        </svg>
+      </div>
+
+      {/* Center right — tomato */}
+      <div className="absolute top-1/3 -right-6 w-40 h-40 opacity-[0.12]">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="55" r="35" stroke="#2d5a27" strokeWidth="5" fill="none" />
+          <path d="M50 20 C55 10,65 8,70 15 C65 22,58 25,50 20Z" fill="#2d5a27" />
+          <path d="M45 22 C40 12,30 10,25 17 C30 24,38 27,45 22Z" fill="#2d5a27" />
+          <path d="M35 55 C30 45,20 50,25 60" stroke="#2d5a27" strokeWidth="2" fill="none" />
+        </svg>
+      </div>
+
+      {/* Bottom right — okra cross-section */}
+      <div className="absolute bottom-20 -right-4 w-32 h-32 opacity-10">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="30" stroke="#2d5a27" strokeWidth="4" fill="none" />
+          <circle cx="50" cy="50" r="10" stroke="#2d5a27" strokeWidth="2" fill="none" />
+          <line x1="50" y1="20" x2="50" y2="80" stroke="#2d5a27" strokeWidth="2" />
+          <line x1="20" y1="50" x2="80" y2="50" stroke="#2d5a27" strokeWidth="2" />
+        </svg>
+      </div>
+
     </div>
   );
 }
@@ -320,7 +318,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => navigate("/new-plan")}
-                  className="shrink-0 flex items-center gap-1.5 bg-primary text-[#111812] text-xs font-bold px-3 py-2 rounded-full hover:bg-[#22d940] transition-colors"
+                  className="shrink-0 flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-3 py-2 rounded-full hover:bg-primary-light transition-colors"
                 >
                   <span className="text-[10px]">✦</span>
                   Generate Plan
@@ -352,24 +350,21 @@ export default function Dashboard() {
                     }
                     className="text-xs font-bold text-primary hover:underline"
                   >
-                    View full plan
+                    View full plan →
                   </button>
                 </div>
 
                 <div
-                  className="flex gap-2 overflow-x-auto pb-2"
+                  className="flex gap-3 overflow-x-auto pb-2"
                   style={{ scrollbarWidth: "none" }}
                 >
                   {glanceDays.map((day) => {
-                    const isToday   = day.dateStr === today;
-                    const dayMeal   = getMealForDay(day.dateStr);
+                    const isToday  = day.dateStr === today;
+                    const dayMeal  = getMealForDay(day.dateStr);
                     const mealImage = dayMeal ? getMealImage(dayMeal.meal_name) : null;
-                    const shortName =
-                      dayMeal
-                        ? dayMeal.meal_name.length > 8
-                          ? dayMeal.meal_name.slice(0, 8) + "…"
-                          : dayMeal.meal_name
-                        : null;
+                    const mealWords = dayMeal
+                      ? dayMeal.meal_name.split(" ").slice(0, 2).join(" ")
+                      : null;
 
                     return (
                       <button
@@ -380,63 +375,35 @@ export default function Dashboard() {
                             ? navigate(`/week-plan/${activePlan.plan_id}`)
                             : navigate("/week-plan")
                         }
-                        className={[
-                          "flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl min-w-[100px] transition-all shrink-0",
-                          isToday
-                            ? "bg-[#2d5a27] text-white shadow-md"
-                            : "bg-white dark:bg-[#1a2e1d] border border-gray-100 dark:border-gray-800",
-                        ].join(" ")}
+                        className="flex-shrink-0 w-32 bg-white dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/10 shadow-sm overflow-hidden text-left transition-all hover:shadow-md"
                       >
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wide ${
-                            isToday ? "text-white/70" : "text-[#618968]"
-                          }`}
-                        >
-                          {day.short}
-                        </span>
-                        <span
-                          className={`text-sm font-extrabold ${
-                            isToday ? "text-white" : "text-[#111812] dark:text-white"
-                          }`}
-                        >
-                          {day.dateNum}
-                        </span>
-
-                        {/* Meal image or placeholder */}
-                        {mealImage ? (
-                          <img
-                            src={mealImage}
-                            alt={dayMeal.meal_name}
-                            className="w-16 h-16 rounded-full object-cover border-2 border-white/20"
-                          />
-                        ) : (
-                          <div
-                            className={[
-                              "w-16 h-16 rounded-full flex items-center justify-center border-2",
-                              isToday
-                                ? "border-white/20 bg-white/10"
-                                : "border-dashed border-gray-200 dark:border-gray-700",
-                            ].join(" ")}
-                          >
-                            <span
-                              className={`material-symbols-outlined text-sm ${
-                                isToday ? "text-white/50" : "text-gray-300 dark:text-gray-600"
-                              }`}
-                            >
-                              add
-                            </span>
+                        {/* Date header */}
+                        <div className={`px-3 py-2 text-center ${isToday ? "bg-[#2d5a27]" : "bg-gray-50 dark:bg-white/5"}`}>
+                          <div className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-white/70" : "text-[#618968]"}`}>
+                            {day.short}
                           </div>
-                        )}
+                          <div className={`text-lg font-extrabold leading-tight ${isToday ? "text-white" : "text-[#111812] dark:text-white"}`}>
+                            {day.dateNum}
+                          </div>
+                        </div>
 
-                        {/* Meal name truncated */}
-                        <span
-                          className={`text-[9px] font-semibold text-center leading-tight max-w-full truncate ${
-                            isToday ? "text-white/80" : "text-[#618968]"
-                          }`}
-                          style={{ maxWidth: "96px" }}
-                        >
-                          {shortName ?? "—"}
-                        </span>
+                        {/* Meal content */}
+                        <div className="p-3 flex flex-col items-center gap-2">
+                          {mealImage ? (
+                            <img
+                              src={mealImage}
+                              alt={dayMeal.meal_name}
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center">
+                              <span className="material-symbols-outlined text-gray-300 dark:text-white/30 text-xl">restaurant</span>
+                            </div>
+                          )}
+                          <span className="text-[11px] font-semibold text-[#111812] dark:text-white text-center leading-tight line-clamp-2 w-full">
+                            {mealWords ?? "—"}
+                          </span>
+                        </div>
                       </button>
                     );
                   })}

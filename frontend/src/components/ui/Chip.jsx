@@ -23,7 +23,7 @@ const VARIANTS = {
    */
   dietary: {
     active:
-      "bg-primary text-[#111812] border-transparent",
+      "bg-primary text-white border-transparent",
     inactive:
       "bg-white dark:bg-[#1a2e1d] border border-gray-100 dark:border-gray-800 text-[#111812] dark:text-white",
   },

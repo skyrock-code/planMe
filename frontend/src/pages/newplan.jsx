@@ -267,7 +267,7 @@ export default function NewPlan() {
                   className={[
                     "px-4 py-2 rounded-full text-sm font-semibold border transition-all",
                     selected
-                      ? "bg-primary text-[#111812] border-primary"
+                      ? "bg-primary text-white border-primary"
                       : "bg-transparent text-[#618968] border-[#dbe6dd] dark:border-white/10 dark:text-gray-300",
                   ].join(" ")}
                 >
@@ -338,7 +338,7 @@ export default function NewPlan() {
                     navigate(`/week-plan/${generatedPlanId}`);
                   }
                 }}
-                className="flex-1 bg-primary text-[#111812] font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
+                className="flex-1 bg-primary text-white font-semibold py-3 rounded-xl text-sm disabled:opacity-60"
               >
                 Yes, still have them
               </button>

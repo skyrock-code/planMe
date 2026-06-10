@@ -301,7 +301,7 @@ function AddIngredientModal({ listId, onClose, onAdded }) {
               type="button"
               onClick={handleConfirm}
               disabled={submitting || !canConfirm}
-              className="flex-[2] h-11 rounded-full bg-primary text-[#111812] text-sm font-bold disabled:opacity-40 active:scale-[0.97] transition-all"
+              className="flex-[2] h-11 rounded-full bg-primary text-white text-sm font-bold disabled:opacity-40 active:scale-[0.97] transition-all"
             >
               {submitting ? "Adding…" : "Add to List"}
             </button>

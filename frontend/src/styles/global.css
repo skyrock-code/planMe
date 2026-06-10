@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --primary-green: #2d5a27;
+  --primary-light: #4a7c43;
+  --primary-dark: #1e3d19;
+}
 
 body {
   font-family: 'Plus Jakarta Sans', sans-serif;
