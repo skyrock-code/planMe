@@ -147,116 +147,124 @@ def ai_generate_plan():
         '"total_cost_xaf": <float>, "reasoning": <str>}'
     )
 
+    ai_data      = None
+    fallback_reason = None
+
     try:
         raw_response = call_ai_model(system_prompt, user_message, max_tokens=1024)
-    except RuntimeError as exc:
-        return jsonify({"error": str(exc)}), 500
-    except Exception as exc:
-        return jsonify({"error": f"AI model call failed: {exc}"}), 500
 
-    # ── Step 3: Parse and validate ────────────────────────────────────
-    cleaned = strip_markdown_fences(raw_response)
-
-    try:
+        # ── Step 3: Parse and validate ────────────────────────────────
+        cleaned = strip_markdown_fences(raw_response)
         ai_data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        return jsonify({
-            "error":        f"Model returned invalid JSON: {exc}",
-            "raw_response": raw_response,
-        }), 500
 
-    if "plan" not in ai_data or not isinstance(ai_data["plan"], list):
-        return jsonify({
-            "error":        'Model response missing "plan" array',
-            "raw_response": raw_response,
-        }), 500
+        if "plan" not in ai_data or not isinstance(ai_data["plan"], list):
+            raise ValueError('Model response missing "plan" array')
 
-    validation_errors = []
-    occupied_days: set = set()
+        validation_errors = []
+        occupied_days: set = set()
 
-    for idx, item in enumerate(ai_data["plan"]):
-        label = f"plan[{idx}]"
+        for idx, item in enumerate(ai_data["plan"]):
+            label = f"plan[{idx}]"
 
-        # meal_id must be from the safe list
-        mid = item.get("meal_id")
-        if not isinstance(mid, int) or mid not in safe_meal_ids:
+            mid = item.get("meal_id")
+            if not isinstance(mid, int) or mid not in safe_meal_ids:
+                validation_errors.append(f"{label}: meal_id {mid!r} not in safe meals")
+                continue
+
+            dur = item.get("duration_days", 1)
+            if not isinstance(dur, int) or not (1 <= dur <= 3):
+                validation_errors.append(f"{label}: duration_days must be 1–3, got {dur!r}")
+                continue
+
+            try:
+                slot_start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
+            except (KeyError, ValueError):
+                validation_errors.append(f"{label}: invalid or missing start_date")
+                continue
+
+            if not (plan.start_date <= slot_start <= plan.end_date):
+                validation_errors.append(
+                    f"{label}: start_date {slot_start} outside plan range"
+                )
+                continue
+
+            slot_days = {slot_start + timedelta(days=i) for i in range(dur)}
+            overlap   = slot_days & occupied_days
+            if overlap:
+                validation_errors.append(f"{label}: date overlap on {sorted(str(d) for d in overlap)}")
+                continue
+
+            occupied_days |= slot_days
+
+        ai_total = float(ai_data.get("total_cost_xaf", 0))
+        if ai_total > plan.total_budget * 1.05:
             validation_errors.append(
-                f"{label}: meal_id {mid!r} is not in the safe meals list"
+                f"total_cost_xaf {ai_total:.2f} exceeds budget {plan.total_budget * 1.05:.2f}"
             )
-            continue
 
-        # duration_days must be 1–3
-        dur = item.get("duration_days", 1)
-        if not isinstance(dur, int) or not (1 <= dur <= 3):
-            validation_errors.append(
-                f"{label}: duration_days must be 1–3, got {dur!r}"
-            )
-            continue
+        if validation_errors:
+            raise ValueError(f"Validation failed: {validation_errors}")
 
-        # start_date must be valid and within plan range
-        try:
-            slot_start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
-        except (KeyError, ValueError):
-            validation_errors.append(f"{label}: invalid or missing start_date")
-            continue
+    except Exception as exc:
+        # AI call failed or response was invalid — fall back to rule-based
+        print(f"[ai.py] AI generation failed, using rule-based fallback: {exc}")
+        fallback_reason = str(exc)
+        ai_data = None
 
-        if not (plan.start_date <= slot_start <= plan.end_date):
-            validation_errors.append(
-                f"{label}: start_date {slot_start} is outside "
-                f"plan range {plan.start_date}–{plan.end_date}"
-            )
-            continue
-
-        # No date overlaps with earlier slots
-        slot_days = {slot_start + timedelta(days=i) for i in range(dur)}
-        overlap   = slot_days & occupied_days
-        if overlap:
-            validation_errors.append(
-                f"{label}: overlaps with an existing slot on "
-                f"{sorted(str(d) for d in overlap)}"
-            )
-            continue
-
-        occupied_days |= slot_days
-
-    # Budget tolerance: 5 %
-    ai_total    = float(ai_data.get("total_cost_xaf", 0))
-    budget_cap  = plan.total_budget * 1.05
-    if ai_total > budget_cap:
-        validation_errors.append(
-            f"total_cost_xaf {ai_total:.2f} exceeds budget cap "
-            f"{budget_cap:.2f} (budget {plan.total_budget} × 1.05)"
-        )
-
-    if validation_errors:
-        return jsonify({
-            "error":             "AI response failed validation",
-            "validation_errors": validation_errors,
-            "raw_response":      raw_response,
-        }), 422
-
-    # ── Step 4: Persist to database ───────────────────────────────────
+    # ── Step 4: Persist ───────────────────────────────────────────────
     MealPlanMeal.query.filter_by(plan_id=plan_id).delete(synchronize_session=False)
     db.session.flush()
 
-    for item in ai_data["plan"]:
-        slot_start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
-        db.session.add(MealPlanMeal(
-            plan_id       = plan_id,
-            meal_id       = item["meal_id"],
-            start_date    = slot_start,
-            duration_days = item["duration_days"],
-        ))
+    if ai_data:
+        # AI succeeded — persist AI-chosen meals
+        for item in ai_data["plan"]:
+            slot_start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
+            db.session.add(MealPlanMeal(
+                plan_id       = plan_id,
+                meal_id       = item["meal_id"],
+                start_date    = slot_start,
+                duration_days = item["duration_days"],
+            ))
+        db.session.commit()
 
-    db.session.commit()
+        ai_total = float(ai_data.get("total_cost_xaf", 0))
+        return jsonify({
+            "message":        "Meal plan generated successfully",
+            "plan_id":        plan_id,
+            "total_cost_xaf": ai_total,
+            "within_budget":  ai_total <= plan.total_budget,
+            "budget_xaf":     plan.total_budget,
+            "reasoning":      ai_data.get("reasoning", ""),
+            "meals":          ai_data["plan"],
+        }), 201
 
-    # ── Step 5: Return response ───────────────────────────────────────
-    return jsonify({
-        "message":        "Meal plan generated successfully",
-        "plan_id":        plan_id,
-        "total_cost_xaf": ai_total,
-        "within_budget":  ai_total <= plan.total_budget,
-        "budget_xaf":     plan.total_budget,
-        "reasoning":      ai_data.get("reasoning", ""),
-        "meals":          ai_data["plan"],
-    }), 201
+    else:
+        # Fallback: use MealFilterService rule-based schedule
+        schedule = service.generate_weekly_plan(
+            user_id           = plan.user_id,
+            budget            = plan.total_budget,
+            cooking_frequency = plan.cooking_frequency or "every_2_days",
+            start_date        = plan.start_date,
+            end_date          = plan.end_date,
+        )
+
+        for slot in schedule:
+            db.session.add(MealPlanMeal(
+                plan_id       = plan_id,
+                meal_id       = slot["meal_id"],
+                start_date    = slot["date"],
+                duration_days = slot["duration_days"],
+            ))
+        db.session.commit()
+
+        return jsonify({
+            "message":        "Meal plan generated (AI unavailable — rule-based fallback used)",
+            "plan_id":        plan_id,
+            "total_cost_xaf": 0,
+            "within_budget":  True,
+            "reasoning":      f"Fallback reason: {fallback_reason}",
+            "meals":          [
+                {"meal_id": s["meal_id"], "start_date": str(s["date"]), "duration_days": s["duration_days"]}
+                for s in schedule
+            ],
+        }), 201

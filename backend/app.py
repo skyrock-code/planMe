@@ -1,4 +1,5 @@
-from flask import Flask
+from flask import Flask, jsonify
+from datetime import datetime
 from flask_cors import CORS
 from config import Config
 from extensions import db
@@ -11,16 +12,37 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # ── CORS ──────────────────────────────────────────────────────────
+    # Use wildcard origin so any local port works in development and
+    # the production frontend works in production.
+    # JWT is sent in the Authorization header — supports_credentials is
+    # not required (that is for cookie-based auth only).
     CORS(app,
-         origins=[
-             app.config.get('FRONTEND_URL', 'http://localhost:5173'),
-             'https://planme-frontend.onrender.com',
-             'http://localhost:5173',
-             'http://localhost:5174',
-         ],
+         resources={r"/api/*": {"origins": "*"}},
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization"],
-         supports_credentials=True)
+         allow_headers=["Content-Type", "Authorization", "Accept"])
+
+    # Belt-and-suspenders: ensure CORS headers survive any middleware.
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers["Access-Control-Allow-Origin"]  = "*"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, Accept"
+        )
+        response.headers["Access-Control-Allow-Methods"] = (
+            "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        )
+        return response
+    # ──────────────────────────────────────────────────────────────────
+
+    # Health routes
+    @app.route("/ping", methods=["GET"])
+    def ping():
+        return jsonify({"status": "alive", "timestamp": datetime.utcnow().isoformat()}), 200
+
+    @app.route("/", methods=["GET"])
+    def home():
+        return jsonify({"message": "PlanMe API running", "status": "healthy"}), 200
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -76,4 +98,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5000)

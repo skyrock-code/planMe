@@ -123,30 +123,43 @@ export default function NewPlan() {
       const prompt =
         selectedPrefs.length > 0
           ? `User prefers: ${selectedPrefs.join(", ")}`
-          : "no specific preferences";
+          : `Create a ${duration.toLowerCase()} meal plan with budget ${budget} XAF for ${servings} people`;
 
+      // Step 1: Create plan record + get plan_id (also increments at-home counters)
       const planData = {
-        user_id: user.user_id,
+        user_id:           user.user_id,
         start_date,
         end_date,
-        budget: parseFloat(budget),
-        servings: parseInt(servings, 10),
+        budget:            parseFloat(budget),
+        servings:          parseInt(servings, 10),
         cooking_frequency: frequency,
-        prompt,
       };
 
-      const response = await planService.createPlan(planData);
-      setGeneratedPlanId(response.plan_id);
+      const newPlan = await planService.createPlan(planData);
 
-      if (response.needs_review && response.needs_review.length > 0) {
-        setReviewItems(response.needs_review);
+      if (!newPlan.plan_id) {
+        throw new Error("Failed to create plan — no plan_id returned.");
+      }
+
+      setGeneratedPlanId(newPlan.plan_id);
+
+      // Step 2: Fill the plan with AI-selected meals (falls back to rule-based)
+      await planService.generateAIPlan({
+        plan_id: newPlan.plan_id,
+        prompt,
+      });
+
+      // Show always-at-home review modal if triggered by plan creation
+      if (newPlan.needs_review && newPlan.needs_review.length > 0) {
+        setReviewItems(newPlan.needs_review);
         setShowReviewModal(true);
       } else {
-        navigate(`/week-plan/${response.plan_id}`);
+        navigate(`/week-plan/${newPlan.plan_id}`);
       }
     } catch (err) {
       setError(
         err.response?.data?.error ||
+          err.message ||
           "Failed to create plan. Please try again."
       );
     } finally {
