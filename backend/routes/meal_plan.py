@@ -3,35 +3,12 @@ from datetime import datetime, timedelta
 from extensions import db
 from models import (
     MealPlan, Meal, MealPlanMeal,
-    User, UserIngredient,
+    User,
 )
 from services.meal_filter_service import MealFilterService
+from services.at_home_service import check_at_home_review
 
 meal_plan_bp = Blueprint('meal_plan', __name__)
-
-
-# ─────────────────────────────────────────
-# HELPER: increment plan counters for always-at-home ingredients
-# ─────────────────────────────────────────
-def increment_at_home_counters(user_id):
-    """
-    Increments plan_counter for every always-at-home ingredient of this user.
-    Returns a list of ingredient names whose counter has reached 7,
-    indicating the user should be asked whether they still have them.
-    """
-    user_ingredients = UserIngredient.query.filter_by(
-        user_id=user_id,
-        always_at_home=True,
-    ).all()
-
-    needs_review = []
-    for ui in user_ingredients:
-        ui.plan_counter += 1
-        if ui.plan_counter >= 7:
-            needs_review.append(ui.ingredient_name)
-
-    db.session.commit()
-    return needs_review
 
 
 # ─────────────────────────────────────────
@@ -382,7 +359,7 @@ def generate_plan():
 
     db.session.commit()
 
-    needs_review = increment_at_home_counters(user.user_id)
+    needs_review = check_at_home_review(user.user_id)
 
     response_data = {
         "message":        "Meal plan generated successfully",

@@ -11,13 +11,14 @@
  *              /week-plan    → WeekPlan (generated plan view)
  *              /grocery      → GroceryList (shopping list)
  *              /profile      → Profile (user settings)
+ *              /onboarding   → Onboarding (new users only)
  *
  *              Protected routes will be added in Phase 4
  *              when JWT authentication is integrated.
  * @module routes
  */
 
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 
 // ─── PAGE IMPORTS ─────────────────────────────────────────────────────────────
 // Note: filenames must match EXACTLY (case-sensitive) to avoid Vite import errors.
@@ -29,6 +30,23 @@ import WeekPlan    from "./pages/weekplan";
 import GroceryList from "./pages/groceryList";
 import Profile     from "./pages/profile";
 import Onboarding  from "./pages/onboarding";
+
+// ─── CONTEXT IMPORTS ───────────────────────────────────────────────────────────
+
+import { useAuth } from "./context/AuthContext";
+
+// ─── GUARD COMPONENTS ─────────────────────────────────────────────────────────
+
+/**
+ * Redirects authenticated users who have completed onboarding away from /onboarding.
+ */
+function RequireNoOnboarding({ children }) {
+  const { user } = useAuth();
+  if (user?.has_completed_onboarding) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
@@ -55,9 +73,18 @@ export default function AppRoutes() {
       <Route path="/grocery/:planId" element={<GroceryList />} />
       <Route path="/grocery"       element={<GroceryList />} />
       <Route path="/profile"       element={<Profile />}     />
-      <Route path="/onboarding"    element={<Onboarding />}  />
 
-      {/* 
+      {/* Onboarding — only accessible to users who haven't completed it */}
+      <Route
+        path="/onboarding"
+        element={
+          <RequireNoOnboarding>
+            <Onboarding />
+          </RequireNoOnboarding>
+        }
+      />
+
+      {/*
         TODO Phase 4: Add a catch-all 404 route
         <Route path="*" element={<NotFound />} />
       */}

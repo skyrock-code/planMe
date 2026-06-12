@@ -20,7 +20,7 @@ class MealFilterService:
     # budget_per_meal — when provided, also drops
     # meals whose single-cook cost exceeds it.
     # ─────────────────────────────────────────
-    def get_eligible_meals(self, user_id, budget_per_meal=None, extra_prefs=None):
+    def get_eligible_meals(self, user_id, budget_per_meal=None, extra_prefs=None, max_cook_time=None):
         """
         Returns a list of Meal objects eligible for the given user.
 
@@ -33,7 +33,9 @@ class MealFilterService:
         3. Preference filter — when extra_prefs is provided (e.g. chip selections),
                                narrow to meals matching those tags; silently falls
                                back to step-2 result when nothing matches
-        4. Budget filter   — remove meals exceeding budget_per_meal
+        4. Cooking time filter — when max_cook_time is provided, only meals that
+                                 take less than or equal to that time
+        5. Budget filter   — remove meals exceeding budget_per_meal
                              (only applied when budget_per_meal is given)
         """
         user = User.query.get(user_id)
@@ -75,7 +77,16 @@ class MealFilterService:
             if pref_filtered:
                 safe_meals = pref_filtered
 
-        # ── 4. Budget filter (optional) ───────────────────────────────
+        # ── 4. Cooking time filter ────────────────────────────────────
+        if max_cook_time is not None:
+            time_filtered = [
+                m for m in safe_meals
+                if getattr(m, 'cook_time', 45) <= max_cook_time
+            ]
+            if time_filtered:
+                safe_meals = time_filtered
+
+        # ── 5. Budget filter (optional) ───────────────────────────────
         if budget_per_meal is not None:
             safe_meals = [
                 m for m in safe_meals
@@ -145,6 +156,49 @@ class MealFilterService:
         return round(total_cost, 2)
 
     # ─────────────────────────────────────────
+    # filter_by_cooking_time
+    # ─────────────────────────────────────────
+    def filter_by_cooking_time(self, meals, max_time=None, min_time=None):
+        """Filter meals by cooking time."""
+        if max_time is None and min_time is None:
+            return meals
+        
+        filtered = []
+        for meal in meals:
+            cook_time = getattr(meal, 'cook_time', 45)
+            if max_time and cook_time > max_time:
+                continue
+            if min_time and cook_time < min_time:
+                continue
+            filtered.append(meal)
+        return filtered
+
+    # ─────────────────────────────────────────
+    # filter_by_diet_tags
+    # ─────────────────────────────────────────
+    def filter_by_diet_tags(self, meals, required_tags=None, exclude_tags=None):
+        """Filter meals by diet tags."""
+        if not required_tags and not exclude_tags:
+            return meals
+        
+        filtered = []
+        for meal in meals:
+            meal_tags = [tag.diet_type for tag in meal.diet_tags]
+            
+            # Check required tags
+            if required_tags:
+                if not any(tag in meal_tags for tag in required_tags):
+                    continue
+            
+            # Check exclude tags
+            if exclude_tags:
+                if any(tag in meal_tags for tag in exclude_tags):
+                    continue
+            
+            filtered.append(meal)
+        return filtered
+
+    # ─────────────────────────────────────────
     # generate_weekly_plan
     #
     # Builds a meal schedule for a date range
@@ -162,6 +216,7 @@ class MealFilterService:
         end_date=None,
         extra_prefs=None,
         preferred_meal_ids=None,
+        max_cook_time=None,
     ):
         """
         Generates a meal schedule for the given user and budget.
@@ -178,6 +233,7 @@ class MealFilterService:
                                       selection (e.g. ["vegetarian", "spicy"])
         preferred_meal_ids : list   — optional meal_ids preferred by AI or user
                                       (meals are prioritized but fallback pool remains)
+        max_cook_time     : int     — optional maximum cooking time in minutes
 
         Returns
         -------
@@ -199,7 +255,11 @@ class MealFilterService:
         if end_date is None:
             end_date = start_date + timedelta(days=6)
 
-        eligible_meals = self.get_eligible_meals(user_id, extra_prefs=extra_prefs)
+        eligible_meals = self.get_eligible_meals(
+            user_id, 
+            extra_prefs=extra_prefs,
+            max_cook_time=max_cook_time
+        )
         if not eligible_meals:
             return []
 

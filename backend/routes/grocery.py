@@ -203,9 +203,9 @@ def generate_grocery_list(plan_id):
     db.session.commit()
 
     # ─────────────────────────────────────
-    # SAVE ITEMS (skip ingredients the user has always at home)
+    # SAVE ITEMS (flag globally always-at-home ingredients)
     # ─────────────────────────────────────
-    user_at_home = {
+    user_always_at_home = {
         ui.ingredient_name.lower()
         for ui in UserIngredient.query.filter_by(
             user_id=plan.user_id,
@@ -213,25 +213,34 @@ def generate_grocery_list(plan_id):
         ).all()
     }
 
-    for ingredient_id, data in grocery_map.items():
+    user_ingredients_map = {
+        ui.ingredient_name.lower(): ui
+        for ui in UserIngredient.query.filter_by(
+            user_id=plan.user_id,
+        ).all()
+    }
 
-        if data["name"].lower() in user_at_home:
-            continue
+    for ingredient_id, data in grocery_map.items():
+        ingredient_name_lower = data["name"].lower()
+        is_always_at_home = ingredient_name_lower in user_always_at_home
+
+        if is_always_at_home and ingredient_name_lower in user_ingredients_map:
+            user_ing = user_ingredients_map[ingredient_name_lower]
+            user_ing.plan_counter = (user_ing.plan_counter or 0) + 1
+            db.session.add(user_ing)
+
+        user_ing = user_ingredients_map.get(ingredient_name_lower)
 
         item = GroceryListItem(
             list_id=grocery_list.list_id,
-
             ingredient_id=ingredient_id,
-
+            user_ingredient_id=user_ing.id if user_ing and is_always_at_home else None,
             quantity=data["quantity"],
-
             unit=data["unit"],
-
             unit_price=data["unit_price"],
-
             total_price=data["total_price"],
-
             is_custom=False,
+            always_at_home=is_always_at_home,
         )
 
         db.session.add(item)

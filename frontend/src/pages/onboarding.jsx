@@ -57,7 +57,6 @@ export default function Onboarding() {
     setAllergies((prev) => prev.filter((a) => a !== allergen));
   }
 
-  // ── Submit ──
   async function handleComplete() {
     if (!budget || Number(budget) <= 0) {
       setError("Please enter your weekly food budget.");
@@ -65,24 +64,40 @@ export default function Onboarding() {
     }
     setError("");
     setSaving(true);
+    
     try {
+      // Step 1: Save profile data
       await authService.updateProfile({
         household_size:    householdSize,
         preferred_budget:  Number(budget),
         cooking_frequency: cookingFrequency,
       });
 
-      await Promise.all(selectedDiets.map((diet) =>
-        authService.addDiet(diet.toLowerCase())
-      ));
+      // Step 2: Save diet preferences
+      if (selectedDiets.length > 0) {
+        await Promise.all(selectedDiets.map((diet) =>
+          authService.addDiet(diet.toLowerCase())
+        ));
+      }
 
-      await Promise.all(allergies.map((allergen) =>
-        authService.addAllergy(allergen)
-      ));
+      // Step 3: Save allergies
+      if (allergies.length > 0) {
+        await Promise.all(allergies.map((allergen) =>
+          authService.addAllergy(allergen)
+        ));
+      }
 
-      localStorage.setItem(`planme_onboarded_${user.user_id}`, "true");
+      // Step 4: Mark onboarding as complete in backend
+      await authService.completeOnboarding();
+
+      // Step 5: Set localStorage flag for immediate UI check
+      localStorage.setItem(`planme_onboarded_${user?.user_id}`, "true");
+      
+      // Step 6: Navigate to dashboard
       navigate("/dashboard");
+      
     } catch (err) {
+      console.error("Onboarding error:", err);
       setError(
         err.response?.data?.error || "Something went wrong. Please try again."
       );
@@ -96,7 +111,7 @@ export default function Onboarding() {
       {/* Header */}
       <div className="px-4 pt-10 pb-6 max-w-md mx-auto text-center">
         <h1 className="text-2xl font-extrabold text-[#111812] dark:text-white">
-          Let's get to know you !
+          Let's get to know you 🌿
         </h1>
         <p className="text-sm text-[#618968] mt-2">
           Help us plan better meals for your household
@@ -274,16 +289,15 @@ export default function Onboarding() {
         )}
 
         {/* ── CTA ── */}
-        <div className="px-4 mt-2">
+        <div className="px-4 mt-2 mb-8">
           <Button
             variant="primary"
             size="lg"
-            className="w-full"
+            fullWidth
             onClick={handleComplete}
             disabled={saving}
-            icon={saving ? undefined : "rocket_launch"}
           >
-            {saving ? "Saving..." : "Start Planning "}
+            {saving ? "Saving..." : "Start Planning 🎯"}
           </Button>
         </div>
 

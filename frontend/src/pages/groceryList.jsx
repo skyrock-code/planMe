@@ -338,11 +338,6 @@ export default function GroceryList() {
   const [deletingItemId, setDeletingItemId] = useState(null);
   const [showModal, setShowModal]           = useState(false);
 
-  // ── Bulk hide (view-only, no DB changes) ──
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedItems, setSelectedItems]     = useState(new Set());
-  const [hiddenItems, setHiddenItems]         = useState(new Set());
-
   // ── Export ──
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [copySuccess, setCopySuccess]       = useState(false);
@@ -442,10 +437,6 @@ export default function GroceryList() {
     try {
       const data = await groceryService.generateList(planId);
       applyListData(data);
-      // Regenerating restores all items — clear all view-only state
-      setHiddenItems(new Set());
-      setSelectedItems(new Set());
-      setIsSelectionMode(false);
       setEditingItem(null);
     } catch (err) {
       setError(err.response?.data?.error ?? "Regeneration failed.");
@@ -545,43 +536,11 @@ export default function GroceryList() {
     }
   }
 
-  // ── Bulk hide (view-only — no DB calls) ──
-
-  function toggleSelectItem(itemId) {
-    const updated = new Set(selectedItems);
-    updated.has(itemId) ? updated.delete(itemId) : updated.add(itemId);
-    setSelectedItems(updated);
-  }
-
-  function toggleSelectCategory(categoryItems) {
-    const updated   = new Set(selectedItems);
-    const allPicked = categoryItems.every((item) => updated.has(item.item_id));
-    categoryItems.forEach((item) =>
-      allPicked ? updated.delete(item.item_id) : updated.add(item.item_id)
-    );
-    setSelectedItems(updated);
-  }
-
-  function selectAll() {
-    setSelectedItems(new Set(visibleItems.map((i) => i.item_id)));
-  }
-
-  function hideSelected() {
-    setHiddenItems((prev) => new Set([...prev, ...selectedItems]));
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
-  }
-
-  function cancelSelection() {
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
-  }
-
   // ── Derived values ──
 
   const visibleItems = useMemo(
-    () => items.filter((i) => !hiddenItems.has(i.item_id)),
-    [items, hiddenItems]
+    () => items.filter((i) => !i.always_at_home),
+    [items]
   );
 
   const groupedItems = useMemo(() => {
@@ -593,14 +552,16 @@ export default function GroceryList() {
     return groups;
   }, [visibleItems]);
 
-  // Total excluding hidden items AND always_at_home items (frontend only)
+  const hiddenItems = useMemo(
+    () => items.filter((i) => i.always_at_home),
+    [items]
+  );
+
+  // Total excluding always_at_home items
   const visibleTotal = useMemo(
     () =>
       Math.round(
-        visibleItems.reduce(
-          (sum, item) => sum + (item.always_at_home ? 0 : item.total_price),
-          0
-        ) * 100
+        visibleItems.reduce((sum, item) => sum + item.total_price, 0) * 100
       ) / 100,
     [visibleItems]
   );
@@ -627,11 +588,18 @@ export default function GroceryList() {
       if (catItems.length === 0) continue;
       lines.push(`--- ${category} ---`);
       for (const item of catItems) {
-        const atHome = item.always_at_home ? " [at home]" : "";
-        const unit   = item.unit ? ` ${item.unit}` : "";
+        const unit = item.unit ? ` ${item.unit}` : "";
         lines.push(
-          `  ${item.name} ${item.quantity}${unit} = ${item.total_price} XAF${atHome}`
+          `  ${item.name} ${item.quantity}${unit} = ${item.total_price} XAF`
         );
+      }
+      lines.push("");
+    }
+    if (hiddenItems.length > 0) {
+      lines.push("--- ALWAYS AT HOME (not included in total) ---");
+      for (const item of hiddenItems) {
+        const unit = item.unit ? ` ${item.unit}` : "";
+        lines.push(`  ✓ ${item.name} ${item.quantity}${unit}`);
       }
       lines.push("");
     }
@@ -735,7 +703,7 @@ export default function GroceryList() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark pb-36">
+    <div className="min-h-screen bg-background-light dark:bg-background-dark pb-52">
 
       {/* ── Top bar ── */}
       <TopAppBar
@@ -787,8 +755,8 @@ export default function GroceryList() {
               <p className="text-xl font-bold text-primary">
                 {visibleItems.length}
               </p>
-              {hiddenItems.size > 0 && (
-                <p className="text-xs text-[#618968]">{hiddenItems.size} hidden</p>
+              {hiddenItems.length > 0 && (
+                <p className="text-xs text-[#618968]">{hiddenItems.length} at home</p>
               )}
             </div>
           </div>
@@ -808,66 +776,18 @@ export default function GroceryList() {
         </div>
       </div>
 
-      {/* ── Selection / bulk action bar ── */}
-      <div className="flex items-center justify-between px-4 py-2 mt-1">
-        {!isSelectionMode ? (
-          <button
-            type="button"
-            onClick={() => setIsSelectionMode(true)}
-            className="text-sm text-[#618968] font-semibold"
-          >
-            Select items
-          </button>
-        ) : (
-          <div className="flex gap-4 items-center">
-            <button
-              type="button"
-              onClick={selectAll}
-              className="text-sm font-semibold text-primary"
-            >
-              Select all
-            </button>
-            <button
-              type="button"
-              onClick={hideSelected}
-              disabled={selectedItems.size === 0}
-              className="text-sm font-semibold text-red-500 disabled:opacity-40"
-            >
-              Remove ({selectedItems.size})
-            </button>
-            <button
-              type="button"
-              onClick={cancelSelection}
-              className="text-sm text-[#618968]"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-
-        {hiddenItems.size > 0 && !isSelectionMode && (
-          <button
-            type="button"
-            onClick={() => setHiddenItems(new Set())}
-            className="text-xs text-[#618968]/70 underline"
-          >
-            Show {hiddenItems.size} hidden
-          </button>
-        )}
-      </div>
-
       {/* ── Items list (grouped by category) ── */}
-      <main className="px-4 pt-1 flex flex-col gap-2">
+      <main className="px-4 pt-1 flex flex-col gap-2 pb-56">
 
         {visibleItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <span className="material-symbols-outlined text-5xl text-[#618968]/30">shopping_cart</span>
             <p className="text-[#618968] text-sm text-center">
-              {hiddenItems.size > 0
-                ? 'All items are hidden. Tap “Show hidden” to restore them.'
+              {hiddenItems.length > 0
+                ? "All items are marked as 'always at home' below."
                 : "Your grocery list is empty."}
             </p>
-            {hiddenItems.size === 0 && (
+            {hiddenItems.length === 0 && (
               <Button variant="outline" size="sm" onClick={() => setShowModal(true)}>
                 Add First Ingredient
               </Button>
@@ -876,76 +796,61 @@ export default function GroceryList() {
         ) : (
           <>
             {CATEGORY_ORDER.map((category) => {
-              const catItems   = groupedItems[category] ?? [];
+              const catItems = groupedItems[category] ?? [];
               if (catItems.length === 0) return null;
-              const style      = CATEGORY_STYLES[category];
-              const allAtHome  = catItems.every((i) => i.always_at_home);
+              const style = CATEGORY_STYLES[category];
+              const allAtHome = catItems.every((i) => i.always_at_home);
               const someAtHome = catItems.some((i) => i.always_at_home);
-              const allSelected = catItems.every((i) => selectedItems.has(i.item_id));
 
               return (
                 <div key={category}>
                   {/* ── Category header ── */}
                   <div
                     className={[
-                      "flex items-center gap-2 px-3 py-1.5 mb-1",
+                      "flex items-center justify-between px-3 py-1.5 mb-1",
                       "border-l-4 rounded-r-lg",
                       "bg-gray-50 dark:bg-white/5",
                       style.border,
                     ].join(" ")}
                   >
-                    {/* Selection checkbox on category */}
-                    {isSelectionMode && (
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={() => toggleSelectCategory(catItems)}
-                        className="w-4 h-4 accent-primary shrink-0"
-                        aria-label={`Select all ${category}`}
-                      />
-                    )}
-
                     <span className={`text-xs font-bold uppercase tracking-widest ${style.text}`}>
                       {category}
                     </span>
-                    <span className="ml-auto text-xs text-[#618968]/50">
+                    <span className="text-xs text-[#618968]/50">
                       {catItems.length} item{catItems.length !== 1 ? "s" : ""}
                     </span>
 
-                    {/* Bulk at-home toggle (hidden while in selection mode) */}
-                    {!isSelectionMode && (
-                      <button
-                        type="button"
-                        onClick={() => handleBulkCategoryToggle(category, catItems)}
-                        title={
-                          allAtHome
-                            ? "Mark all as needed"
-                            : someAtHome
-                              ? "Mark remaining at home"
-                              : "Mark all at home"
-                        }
-                        aria-label={`Toggle all ${category} items at home`}
-                        className={[
-                          "w-6 h-6 rounded border-2 flex items-center justify-center transition-colors shrink-0",
-                          allAtHome
-                            ? "bg-primary/10 border-primary/30 text-primary"
-                            : someAtHome
-                              ? "bg-primary/5 border-primary/20 text-primary/50"
-                              : "border-gray-200 dark:border-white/15 text-gray-300 hover:border-gray-300 hover:text-[#618968]",
-                        ].join(" ")}
-                      >
-                        <span className="material-symbols-outlined text-[12px]">home</span>
-                      </button>
-                    )}
+                    {/* Bulk at-home toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleBulkCategoryToggle(category, catItems)}
+                      title={
+                        allAtHome
+                          ? "Mark all as needed"
+                          : someAtHome
+                            ? "Mark remaining at home"
+                            : "Mark all at home"
+                      }
+                      aria-label={`Toggle all ${category} items at home`}
+                      className={[
+                        "w-6 h-6 rounded border-2 flex items-center justify-center transition-colors shrink-0",
+                        allAtHome
+                          ? "bg-primary/10 border-primary/30 text-primary"
+                          : someAtHome
+                            ? "bg-primary/5 border-primary/20 text-primary/50"
+                            : "border-gray-200 dark:border-white/15 text-gray-300 hover:border-gray-300 hover:text-[#618968]",
+                      ].join(" ")}
+                    >
+                      <span className="material-symbols-outlined text-[12px]">home</span>
+                    </button>
                   </div>
 
                   {/* ── Items in this category ── */}
                   <div className="bg-white dark:bg-[#1a2e1d] rounded-xl overflow-hidden shadow-sm border border-gray-50 dark:border-gray-800 mb-3">
                     {catItems.map((item, index) => {
-                      const isAtHome     = item.always_at_home;
-                      const isDeleting   = deletingItemId === item.item_id;
-                      const isSelected   = selectedItems.has(item.item_id);
-                      const canEdit      = !isAtHome && !isSelectionMode;
+                      const isAtHome = item.always_at_home;
+                      const isDeleting = deletingItemId === item.item_id;
+                      const canEdit = !isAtHome;
                       const isEditingQty = editingItem?.id === item.item_id && editingItem.field === "quantity";
                       const isEditingTot = editingItem?.id === item.item_id && editingItem.field === "total_price";
 
@@ -957,24 +862,10 @@ export default function GroceryList() {
                             index < catItems.length - 1
                               ? "border-b border-gray-50 dark:border-gray-800"
                               : "",
-                            isAtHome   ? "opacity-50" : "",
-                            isSelected ? "bg-primary/5" : "",
+                            isAtHome ? "opacity-50" : "",
                             isDeleting ? "opacity-40 pointer-events-none" : "",
                           ].join(" ")}
                         >
-                          {/* Checkbox: selection in selection mode, otherwise shopping toggle */}
-                          {isSelectionMode ? (
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSelectItem(item.item_id)}
-                              className="w-5 h-5 accent-primary mt-0.5 shrink-0"
-                              aria-label={`Select ${item.name}`}
-                            />
-                          ) : (
-                            <div className="mt-0.5 w-5 h-5 shrink-0" />
-                          )}
-
                           {/* Content: name + formula */}
                           <div className="flex-1 min-w-0">
                             {/* Name row */}
@@ -1084,38 +975,36 @@ export default function GroceryList() {
                             </div>
                           </div>
 
-                          {/* Actions (hidden in selection mode) */}
-                          {!isSelectionMode && (
-                            <div className="flex items-center gap-1 mt-0.5 shrink-0">
-                              {/* Always-at-home toggle */}
-                              <button
-                                type="button"
-                                onClick={() => handleToggleHome(item.item_id)}
-                                aria-label={isAtHome ? "Mark as needed" : "Mark as always at home"}
-                                title={isAtHome ? "I need to buy this" : "I always have this at home"}
-                                className={[
-                                  "w-7 h-7 flex items-center justify-center rounded-full transition-colors",
-                                  isAtHome
-                                    ? "text-primary bg-primary/10"
-                                    : "text-gray-300 hover:text-[#618968] hover:bg-gray-100 dark:hover:bg-white/10",
-                                ].join(" ")}
-                              >
-                                <span className="material-symbols-outlined text-sm">home</span>
-                              </button>
+                          {/* Actions */}
+                          <div className="flex items-center gap-1 mt-0.5 shrink-0">
+                            {/* Always-at-home toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleHome(item.item_id)}
+                              aria-label={isAtHome ? "Mark as needed" : "Mark as always at home"}
+                              title={isAtHome ? "I need to buy this" : "I always have this at home"}
+                              className={[
+                                "w-7 h-7 flex items-center justify-center rounded-full transition-colors",
+                                isAtHome
+                                  ? "text-primary bg-primary/10"
+                                  : "text-gray-300 hover:text-[#618968] hover:bg-gray-100 dark:hover:bg-white/10",
+                              ].join(" ")}
+                            >
+                              <span className="material-symbols-outlined text-sm">home</span>
+                            </button>
 
-                              {/* Delete */}
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(item.item_id)}
-                                aria-label={`Remove ${item.name}`}
-                                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                              >
-                                <span className="material-symbols-outlined text-sm text-gray-300 hover:text-red-500 transition-colors">
-                                  delete
-                                </span>
-                              </button>
-                            </div>
-                          )}
+                            {/* Delete */}
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item.item_id)}
+                              aria-label={`Remove ${item.name}`}
+                              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-sm text-gray-300 hover:text-red-500 transition-colors">
+                                delete
+                              </span>
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1126,8 +1015,56 @@ export default function GroceryList() {
           </>
         )}
 
+        {/* Always at Home Section - Always visible */}
+        <div className="mt-6 mb-4 border-t-2 border-primary/20 pt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-primary">home</span>
+            <h3 className="text-sm font-bold text-[#111812] dark:text-white">
+              Always at Home ({hiddenItems.length} items)
+            </h3>
+            <span className="text-[10px] bg-primary/20 text-[#618968] px-2 py-0.5 rounded-full">
+              Hidden from total
+            </span>
+          </div>
+
+          {hiddenItems.length > 0 ? (
+            <div className="space-y-2 bg-gray-50 dark:bg-white/5 rounded-xl p-3">
+              {hiddenItems.map((item) => (
+                <div key={item.item_id} className="flex justify-between items-center text-sm py-2 border-b border-gray-200 dark:border-white/10 last:border-0">
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="material-symbols-outlined text-base text-green-600">check_circle</span>
+                    <div>
+                      <span className="line-through text-gray-500">{item.name}</span>
+                      <span className="text-xs text-gray-400 ml-2">({item.quantity} {item.unit})</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleToggleHome(item.item_id)}
+                    className="text-primary text-xs hover:underline px-3 py-1 rounded-full border border-primary/30"
+                  >
+                    Move to list
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 bg-gray-50 dark:bg-white/5 rounded-xl">
+              <p className="text-xs text-[#618968]">
+                No items marked as always at home yet.
+              </p>
+              <p className="text-[10px] text-[#618968]/60 mt-1">
+                Tap the 🏠 icon on any item to hide it from all future plans.
+              </p>
+            </div>
+          )}
+
+          <p className="text-[10px] text-[#618968] mt-2 text-center">
+            These items are always at home. After 7 plans, you'll be asked if you still have them.
+          </p>
+        </div>
+
         {/* Hint */}
-        {visibleItems.length > 0 && !isSelectionMode && (
+        {visibleItems.length > 0 && (
           <p className="text-xs text-[#618968]/60 text-center pt-1 pb-2">
             Tap qty or total to edit · tap{" "}
             <span className="material-symbols-outlined text-[11px] align-middle">home</span>{" "}
@@ -1156,21 +1093,20 @@ export default function GroceryList() {
             className="flex-1"
             onClick={() => setShowModal(true)}
           >
-            Add Item
+            Add
           </Button>
 
           {/* Export dropdown */}
           <div className="relative flex-1" ref={exportMenuRef}>
             <Button
-              variant="outline"
-              size="md"
-              icon={copySuccess ? "check_circle" : "share"}
-              className="w-full"
-              onClick={() => setShowExportMenu((v) => !v)}
-            >
-              {copySuccess ? "Copied!" : "Export"}
-            </Button>
-
+                variant="outline"
+                size="md"
+                className="flex-1"
+                icon={<span className="material-symbols-outlined text-lg">share</span>}
+                onClick={() => setShowExportMenu(!showExportMenu)}
+              >
+                Export
+              </Button>
             {showExportMenu && (
               <div className="absolute bottom-full mb-2 left-0 w-44 bg-white dark:bg-[#1a2e1d] rounded-xl border border-gray-100 dark:border-white/10 shadow-lg overflow-hidden z-50">
                 <button
@@ -1203,15 +1139,15 @@ export default function GroceryList() {
             )}
           </div>
 
-          <Button
-            variant="primary"
-            size="md"
-            icon="check_circle"
-            className="flex-[2]"
-            onClick={() => navigate("/week-plan")}
-          >
-            Done Shopping
-          </Button>
+           <Button
+              variant="primary"
+              size="md"
+              className="flex-1"
+              icon={<span className="material-symbols-outlined text-lg">check_circle</span>}
+              onClick={() => navigate("/dashboard")}
+            >
+              Done
+            </Button>
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 import json
 import re
 from flask import current_app
+import time
+import requests
 
 
 class AIIntentService:
@@ -67,7 +69,7 @@ class AIIntentService:
 
     def _call_model(self, system_prompt: str, user_message: str) -> str:
         """
-        Makes the actual Hugging Face API call.
+        Makes the actual Hugging Face API call with retries and timeout.
 
         Args:
             system_prompt: System message for the model
@@ -78,7 +80,7 @@ class AIIntentService:
 
         Raises:
             RuntimeError if HF_TOKEN is missing
-            Any huggingface_hub exception on network/API failure
+            Any exception on network/API failure
         """
         from huggingface_hub import InferenceClient
 
@@ -89,20 +91,33 @@ class AIIntentService:
                 "Set the HF_TOKEN environment variable."
             )
 
+        # Simple client without session parameter
         client = InferenceClient(
             model="Qwen/Qwen2.5-7B-Instruct",
             token=token,
+            timeout=120,  # 2 minutes timeout
         )
 
-        response = client.chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            max_tokens=256,
-        )
+        # Retry loop with exponential backoff
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                response = client.chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message},
+                    ],
+                    max_tokens=512,
+                    temperature=0.3,
+                )
+                return response.choices[0].message.content
 
-        return response.choices[0].message.content
+            except Exception as e:
+                print(f"[ai_intent_service] Attempt {attempt + 1}/{max_attempts} failed: {e}")
+                if attempt < max_attempts - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                else:
+                    raise
 
     def _strip_markdown_fences(self, text: str) -> str:
         """Remove ```json ... ``` or ``` ... ``` wrappers from model output."""

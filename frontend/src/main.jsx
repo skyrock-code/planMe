@@ -11,7 +11,7 @@
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'  // Changed from BrowserRouter
+import { BrowserRouter } from 'react-router-dom' 
 import { AuthProvider } from './context/AuthContext'
 import './styles/global.css'
 import App from './App.jsx'
@@ -19,11 +19,11 @@ import App from './App.jsx'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {/* HashRouter provides routing context using URL hash - no server config needed */}
-    <HashRouter>
+    <BrowserRouter>
       {/* AuthProvider provides user state and auth functions to all pages */}
       <AuthProvider>
         <App />
       </AuthProvider>
-    </HashRouter>
+    </BrowserRouter>
   </StrictMode>
 )

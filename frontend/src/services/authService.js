@@ -23,10 +23,9 @@ const authService = {
       email:    credentials.email,
       password: credentials.password,
     });
-    const { access_token, user_id, username } = response.data;
-    // Store token — api.js interceptor reads this on every future request
+    const { access_token, user_id, username, has_completed_onboarding } = response.data;
     localStorage.setItem("access_token", access_token);
-    localStorage.setItem("user", JSON.stringify({ user_id, username }));
+    localStorage.setItem("user", JSON.stringify({ user_id, username, has_completed_onboarding }));
     return response.data;
   },
 
@@ -51,6 +50,11 @@ const authService = {
 
   isLoggedIn() {
     return Boolean(localStorage.getItem("access_token"));
+  },
+
+  async completeOnboarding() {
+    const response = await api.post("/onboarding/complete");
+    return response.data;
   },
 
   /**

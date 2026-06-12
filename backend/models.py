@@ -57,6 +57,12 @@ class User(db.Model):
         default="every_2_days"
     )
 
+    has_completed_onboarding = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+
     created_at = db.Column(
         db.DateTime,
         default=datetime.utcnow
@@ -224,6 +230,8 @@ class Meal(db.Model):
         lazy=True,
         cascade="all, delete-orphan"
     )
+
+    cook_time = db.Column(db.Integer) 
 
     def __repr__(self):
         return f"<Meal {self.meal_name}>"

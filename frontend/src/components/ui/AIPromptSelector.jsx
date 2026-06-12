@@ -1,73 +1,71 @@
 import React, { useState } from "react";
 
+// Replace emojis with Material Icons
 const PROMPT_OPTIONS = [
-  { emoji: "🐟", text: "I feel like eating fish this week" },
-  { emoji: "🔥", text: "I want something spicy" },
-  { emoji: "🌿", text: "Light and healthy meals please" },
-  { emoji: "💰", text: "I'm on a tight budget" },
-  { emoji: "🥩", text: "High protein meals" },
-  { emoji: "✨", text: "Surprise me" },
+  { text: "I feel like eating fish this week", icon: "restaurant" },
+  { text: "I want something spicy", icon: "local_fire_department" },
+  { text: "Light and healthy meals please", icon: "spa" },
+  { text: "I'm on a tight budget", icon: "payments" },
+  { text: "High protein meals", icon: "fitness_center" },
+  { text: "Surprise me", icon: "auto_awesome" },
 ];
 
 const AIPromptSelector = ({ selectedPrompt, onSelect }) => {
   const [customText, setCustomText] = useState("");
-  const [selectedPreset, setSelectedPreset] = useState(null);
 
-  const handlePresetSelect = (option) => {
+  const handlePresetSelect = (optionText) => {
     // Toggle selection
-    if (selectedPreset === option.text) {
-      setSelectedPreset(null);
-      setCustomText("");
+    if (selectedPrompt === optionText) {
       onSelect("");
     } else {
-      setSelectedPreset(option.text);
       setCustomText("");
-      onSelect(option.text);
+      onSelect(optionText);
     }
   };
 
   const handleCustomTextChange = (e) => {
     const text = e.target.value;
     setCustomText(text);
-    setSelectedPreset(null);
     onSelect(text);
   };
 
   return (
     <div className="w-full">
-      {/* Preset Prompt Buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      {/* Preset Prompt Buttons - Wrap to next line */}
+      <div className="flex flex-wrap gap-2 mb-4">
         {PROMPT_OPTIONS.map((option) => (
           <button
             key={option.text}
-            onClick={() => handlePresetSelect(option)}
-            className={`p-3 rounded-xl border-2 transition-all text-sm font-medium flex items-center gap-2 justify-center ${
-              selectedPreset === option.text
-                ? "bg-primary text-white border-primary"
-                : "bg-white text-gray-800 border-gray-200 hover:border-primary"
+            onClick={() => handlePresetSelect(option.text)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+              selectedPrompt === option.text
+                ? "bg-primary text-white shadow-md"
+                : "bg-gray-100 dark:bg-white/10 text-[#618968] hover:bg-primary/20"
             }`}
           >
-            <span className="text-lg">{option.emoji}</span>
-            <span className="text-xs">{option.text.split(" ").slice(0, 2).join(" ")}</span>
+            <span className="material-symbols-outlined text-base">
+              {option.icon}
+            </span>
+            {option.text}
           </button>
         ))}
       </div>
 
-      {/* Free-Text Input - Only visible if no preset selected */}
-      {!selectedPreset && (
-        <div className="w-full">
-          <textarea
-            value={customText}
-            onChange={handleCustomTextChange}
-            placeholder="Or describe what you feel like eating..."
-            className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-primary focus:outline-none resize-none text-sm"
-            rows="3"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            {customText.length > 0 && `${customText.length} characters`}
+      {/* Free-Text Input */}
+      <div className="w-full">
+        <textarea
+          value={customText}
+          onChange={handleCustomTextChange}
+          placeholder="Or describe what you feel like eating..."
+          className="w-full p-3 border border-[#dbe6dd] dark:border-white/10 rounded-xl text-sm text-[#111812] dark:text-white bg-transparent focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+          rows={3}
+        />
+        {customText.length > 0 && (
+          <p className="text-xs text-[#618968] mt-1">
+            {customText.length} characters
           </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

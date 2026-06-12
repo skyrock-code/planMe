@@ -1,13 +1,13 @@
 import axios from "axios";
 
-// Get the base URL from environment or use default
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://planme-backend-kgl6.onrender.com";
+// Get the base URL from environment or use default (LOCAL for development)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000";
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
   headers: { "Content-Type": "application/json" },
   withCredentials: false,
-  timeout: 30000, // 30 second timeout
+  timeout: 60000, // 60 second timeout
 });
 
 // Request interceptor - add token
@@ -30,7 +30,7 @@ api.interceptors.response.use(
       // Token expired or invalid
       localStorage.removeItem("access_token");
       localStorage.removeItem("user");
-      window.location.href = "/#/login";
+      window.location.href = "/";
     }
     if (error.response?.status === 400) {
       console.error("Bad request:", error.response.data);

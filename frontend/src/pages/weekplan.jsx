@@ -173,46 +173,26 @@ export default function WeekPlan() {
       <div className="relative min-h-screen bg-background-light dark:bg-background-dark">
 
         {/* Food background decoration */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
-
-          {/* Top right — pepper */}
-          <div className="absolute -top-8 -right-8 w-64 h-64 opacity-20">
-            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <ellipse cx="120" cy="80" rx="40" ry="70" stroke="#2d5a27" strokeWidth="4" fill="none" transform="rotate(-20 120 80)" />
-              <path d="M120 10 C125 0,140 -2,145 5 C140 12,130 15,120 10Z" fill="#2d5a27" />
-              <path d="M80 50 C60 40,50 60,55 80" stroke="#2d5a27" strokeWidth="3" fill="none" />
-            </svg>
-          </div>
-
-          {/* Bottom left — plantain bunch */}
-          <div className="absolute bottom-20 -left-10 w-52 h-52 opacity-15">
-            <svg viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M30 130 C20 80,40 50,70 30 C100 10,120 30,110 60 C90 80,70 100,50 120 C40 125,35 128,30 130Z" stroke="#2d5a27" strokeWidth="5" fill="none" />
-              <path d="M50 120 C40 70,60 45,85 30" stroke="#2d5a27" strokeWidth="4" fill="none" />
-              <path d="M70 110 C60 60,80 40,105 25" stroke="#2d5a27" strokeWidth="3" fill="none" />
-            </svg>
-          </div>
-
-          {/* Center right — tomato */}
-          <div className="absolute top-1/3 -right-6 w-40 h-40 opacity-[0.12]">
+        <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+          <div className="absolute -top-10 -right-10 w-48 h-48 opacity-30">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="55" r="35" stroke="#2d5a27" strokeWidth="5" fill="none" />
-              <path d="M50 20 C55 10,65 8,70 15 C65 22,58 25,50 20Z" fill="#2d5a27" />
-              <path d="M45 22 C40 12,30 10,25 17 C30 24,38 27,45 22Z" fill="#2d5a27" />
-              <path d="M35 55 C30 45,20 50,25 60" stroke="#2d5a27" strokeWidth="2" fill="none" />
+              <circle cx="50" cy="55" r="35" fill="#2d5a27" fillOpacity="0.15" stroke="#2d5a27" strokeWidth="3"/>
+              <path d="M50 20 C55 10,65 8,70 15 C65 22,58 25,50 20Z" fill="#2d5a27" fillOpacity="0.4"/>
+              <path d="M45 22 C40 12,30 10,25 17 C30 24,38 27,45 22Z" fill="#2d5a27" fillOpacity="0.4"/>
             </svg>
           </div>
-
-          {/* Bottom right — okra cross-section */}
-          <div className="absolute bottom-20 -right-4 w-32 h-32 opacity-10">
-            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="50" r="30" stroke="#2d5a27" strokeWidth="4" fill="none" />
-              <circle cx="50" cy="50" r="10" stroke="#2d5a27" strokeWidth="2" fill="none" />
-              <line x1="50" y1="20" x2="50" y2="80" stroke="#2d5a27" strokeWidth="2" />
-              <line x1="20" y1="50" x2="80" y2="50" stroke="#2d5a27" strokeWidth="2" />
+          <div className="absolute -bottom-10 -left-10 w-56 h-56 opacity-30">
+            <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M60 20 C70 10,85 15,80 30 C75 45,65 55,60 70 C55 55,45 45,40 30 C35 15,50 10,60 20Z" fill="#2d5a27" fillOpacity="0.15" stroke="#2d5a27" strokeWidth="3"/>
+              <path d="M60 20 C55 15,50 18,52 25" stroke="#2d5a27" strokeWidth="2" fill="none"/>
             </svg>
           </div>
-
+          <div className="absolute top-1/2 -right-10 w-40 h-40 opacity-25">
+            <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="40" cy="45" rx="25" ry="30" fill="#2d5a27" fillOpacity="0.15" stroke="#2d5a27" strokeWidth="3"/>
+              <circle cx="40" cy="45" r="12" fill="#2d5a27" fillOpacity="0.3"/>
+            </svg>
+          </div>
         </div>
 
         {/* Top bar */}
@@ -250,9 +230,6 @@ export default function WeekPlan() {
                     {day.short}
                   </span>
                   <span className="text-xl font-extrabold">{day.dateNum}</span>
-                  {dayMeal && (
-                    <div className={`w-1 h-1 rounded-full mt-1 ${isActive ? "bg-white" : "bg-primary"}`} />
-                  )}
                 </button>
               );
             })}
@@ -279,7 +256,6 @@ export default function WeekPlan() {
 
                 {dayMeal ? (
                   <>
-                    {/* Meal Card - description passed as prop (inside the card) */}
                     <MealCard
                       layout="row"
                       mealName={dayMeal.meal_name}
@@ -289,12 +265,12 @@ export default function WeekPlan() {
                       isToday={isToday}
                     />
                     
-                    {/* Swap button only */}
+                    {/* Swap button with fixed icon */}
                     <div className="flex gap-2 mt-2">
                       <Button
                         variant="ghost"
                         size="sm"
-                        icon="swap_horiz"
+                        icon={<span className="material-symbols-outlined text-base">swap_horiz</span>}
                         onClick={() => openSwapModal(dayMeal)}
                       >
                         Swap
@@ -302,7 +278,6 @@ export default function WeekPlan() {
                     </div>
                   </>
                 ) : (
-                  /* Empty day placeholder */
                   <div className="flex items-center justify-center p-8 border-2 border-dashed border-[#618968]/20 rounded-xl bg-white/30 dark:bg-white/5">
                     <button
                       type="button"
@@ -321,16 +296,22 @@ export default function WeekPlan() {
           })}
         </main>
 
-        {/* Bottom action bar */}
+        {/* Bottom action bar with fixed icons */}
         <div className="fixed bottom-16 left-0 right-0 max-w-[430px] mx-auto px-4 py-3 bg-white/95 dark:bg-background-dark/95 border-t border-[#618968]/10">
           <div className="flex gap-3">
-            <Button variant="outline" size="md" className="flex-1" onClick={() => navigate("/new-plan")}>
+            <Button 
+              variant="outline" 
+              size="md" 
+              className="flex-1"
+              icon={<span className="material-symbols-outlined text-lg">edit</span>}
+              onClick={() => navigate("/new-plan")}
+            >
               Edit Plan
             </Button>
             <Button
               variant="primary"
               size="md"
-              icon="shopping_cart"
+              icon={<span className="material-symbols-outlined text-lg">shopping_cart</span>}
               className="flex-[2]"
               onClick={() => plan && navigate(`/grocery/${plan.plan_id}`)}
             >
@@ -361,34 +342,27 @@ export default function WeekPlan() {
               </div>
 
               <div className="flex flex-col gap-2">
-                {allMeals.length === 0 ? (
-                  <div className="text-center py-8 text-[#618968]">
-                    <span className="material-symbols-outlined text-4xl mb-2">restaurant_menu</span>
-                    <p>No meals available</p>
-                  </div>
-                ) : (
-                  allMeals.map((meal) => (
-                    <button
-                      key={meal.meal_id}
-                      type="button"
-                      disabled={swapping}
-                      onClick={() => handleMealSelection(meal.meal_id)}
-                      className="flex items-center justify-between p-4 rounded-xl bg-background-light dark:bg-white/5 hover:bg-primary/10 transition-all text-left border border-transparent hover:border-primary/20 disabled:opacity-50"
-                    >
-                      <div>
-                        <span className="font-semibold text-[#111812] dark:text-white text-sm">
-                          {meal.meal_name}
-                        </span>
-                        <p className="text-xs text-[#618968] mt-0.5">
-                          {meal.cuisine_type || "Traditional"} · {meal.servings} servings
-                        </p>
-                      </div>
-                      <span className="material-symbols-outlined text-primary text-base">
-                        {assignTarget ? "add_circle" : "swap_horiz"}
+                {allMeals.map((meal) => (
+                  <button
+                    key={meal.meal_id}
+                    type="button"
+                    disabled={swapping}
+                    onClick={() => handleMealSelection(meal.meal_id)}
+                    className="flex items-center justify-between p-4 rounded-xl bg-background-light dark:bg-white/5 hover:bg-primary/10 transition-all text-left border border-transparent hover:border-primary/20 disabled:opacity-50"
+                  >
+                    <div>
+                      <span className="font-semibold text-[#111812] dark:text-white text-sm">
+                        {meal.meal_name}
                       </span>
-                    </button>
-                  ))
-                )}
+                      <p className="text-xs text-[#618968] mt-0.5">
+                        {meal.cuisine_type || "Traditional"} · {meal.servings} servings
+                      </p>
+                    </div>
+                    <span className="material-symbols-outlined text-primary text-base">
+                      {assignTarget ? "add_circle" : "swap_horiz"}
+                    </span>
+                  </button>
+                ))}
               </div>
 
               <div className="mt-4 pt-2 border-t border-gray-100 dark:border-gray-800">

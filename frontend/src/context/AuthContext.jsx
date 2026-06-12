@@ -22,12 +22,16 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
+  async function completeOnboarding() {
+    await authService.completeOnboarding();
+    setUser((prev) => ({ ...prev, has_completed_onboarding: true }));
+  }
+
   async function login(credentials) {
     const data = await authService.login(credentials);
-    const userData = { user_id: data.user_id, username: data.username };
-    setUser(userData);
-    const onboardingKey = `planme_onboarded_${userData.user_id}`;
-    if (!localStorage.getItem(onboardingKey)) {
+    setUser(data);
+    const onboardingKey = `planme_onboarded_${data.user_id}`;
+    if (!data.has_completed_onboarding && !localStorage.getItem(onboardingKey)) {
       navigate("/onboarding");
     } else {
       navigate("/dashboard");

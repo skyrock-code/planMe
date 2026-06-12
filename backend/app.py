@@ -33,9 +33,9 @@ def create_app():
 
     # CORS configuration
     CORS(app,
-         resources={r"/api/*": {"origins": "*"}},
+         resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "*"]}},
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization", "Accept"])
+        allow_headers=["Content-Type", "Authorization", "Accept"])
 
     @app.after_request
     def add_cors_headers(response):
@@ -72,6 +72,7 @@ def create_app():
     from routes.grocery import grocery_bp
     from routes.ingredients import ingredients_bp
     from routes.ai import ai_bp
+    from routes.onboarding import onboarding_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(meals_bp, url_prefix="/api/meals")
@@ -79,6 +80,7 @@ def create_app():
     app.register_blueprint(grocery_bp, url_prefix="/api/grocery")
     app.register_blueprint(ingredients_bp, url_prefix="/api/ingredients")
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
+    app.register_blueprint(onboarding_bp, url_prefix="/api/onboarding")
 
     # Auto-seed database if empty
     with app.app_context():

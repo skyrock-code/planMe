@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import create_access_token, jwt_required
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from extensions import db
 from models import User, UserAllergy, UserDiet
 
@@ -25,15 +25,15 @@ def register():
     if existing_user:
         return jsonify({"error": "Email already registered"}), 409
 
-    # Hash the password — never store plain text
+    # Hash the password
     hashed_password = generate_password_hash(data['password'])
 
     new_user = User(
         username          = data['username'],
         email             = data['email'],
         password          = hashed_password,
-        age               = data.get('age'),                    # optional
-        gender            = data.get('gender'),                 # optional
+        age               = data.get('age'),
+        gender            = data.get('gender'),
         household_size    = data.get('household_size', 2),
         preferred_budget  = data.get('preferred_budget', 50000.0),
         location          = data.get('location', 'Yaoundé'),
@@ -43,9 +43,14 @@ def register():
     db.session.add(new_user)
     db.session.commit()
 
+    # Generate token after registration
+    access_token = create_access_token(identity=str(new_user.user_id))
+
     return jsonify({
         "message": "User registered successfully",
-        "user_id": new_user.user_id
+        "user_id": new_user.user_id,
+        "access_token": access_token,
+        "username": new_user.username
     }), 201
 
 
@@ -72,14 +77,15 @@ def login():
     access_token = create_access_token(identity=str(user.user_id))
 
     return jsonify({
-        "message":          "Login successful",
-        "access_token":     access_token,
-        "user_id":          user.user_id,
-        "username":         user.username,
-        "household_size":   user.household_size,
-        "preferred_budget": user.preferred_budget,
-        "location":         user.location,
-        "cooking_frequency": user.cooking_frequency,
+        "message":                      "Login successful",
+        "access_token":                 access_token,
+        "user_id":                      user.user_id,
+        "username":                     user.username,
+        "household_size":               user.household_size,
+        "preferred_budget":             user.preferred_budget,
+        "location":                     user.location,
+        "cooking_frequency":            user.cooking_frequency,
+        "has_completed_onboarding":     getattr(user, 'has_completed_onboarding', False),
     }), 200
 
 
@@ -94,7 +100,6 @@ def get_profile():
     Returns the full profile of the currently authenticated user.
     Used by the Profile page to display and edit settings.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
 
@@ -102,17 +107,18 @@ def get_profile():
         return jsonify({"error": "User not found"}), 404
 
     return jsonify({
-        "user_id":          user.user_id,
-        "username":         user.username,
-        "email":            user.email,
-        "age":              user.age,
-        "gender":           user.gender,
-        "household_size":   user.household_size,
-        "preferred_budget": user.preferred_budget,
-        "location":         user.location,
-        "cooking_frequency": user.cooking_frequency,
-        "diets":     [d.diet_type for d in user.diets],
-        "allergies": [a.allergen  for a in user.allergies],
+        "user_id":                      user.user_id,
+        "username":                     user.username,
+        "email":                        user.email,
+        "age":                          user.age,
+        "gender":                       user.gender,
+        "household_size":               user.household_size,
+        "preferred_budget":             user.preferred_budget,
+        "location":                     user.location,
+        "cooking_frequency":            user.cooking_frequency,
+        "has_completed_onboarding":     user.has_completed_onboarding,
+        "diets":                        [d.diet_type for d in user.diets],
+        "allergies":                    [a.allergen for a in user.allergies],
     }), 200
 
 
@@ -127,7 +133,6 @@ def update_profile():
     Updates editable profile fields for the logged-in user.
     Only updates fields that are present in the request body.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
 
@@ -136,11 +141,11 @@ def update_profile():
 
     data = request.get_json()
 
-    if 'username'         in data: user.username         = data['username']
-    if 'location'         in data: user.location         = data['location']
-    if 'household_size'   in data: user.household_size   = int(data['household_size'])
-    if 'preferred_budget' in data: user.preferred_budget = float(data['preferred_budget'])
-    if 'cooking_frequency' in data:
+    if 'username'           in data: user.username         = data['username']
+    if 'location'           in data: user.location         = data['location']
+    if 'household_size'     in data: user.household_size   = int(data['household_size'])
+    if 'preferred_budget'   in data: user.preferred_budget = float(data['preferred_budget'])
+    if 'cooking_frequency'  in data:
         allowed = ['once_daily', 'twice_daily', 'every_2_days', 'every_3_days', 'flexible']
         if data['cooking_frequency'] not in allowed:
             return jsonify({
@@ -154,6 +159,32 @@ def update_profile():
 
 
 # ─────────────────────────────────────────────────────
+# COMPLETE ONBOARDING
+# POST /api/auth/onboarding/complete
+# ─────────────────────────────────────────────────────
+@auth_bp.route('/onboarding/complete', methods=['POST'])
+@jwt_required()
+def complete_onboarding():
+    """
+    Marks the user's onboarding as complete.
+    Sets has_completed_onboarding = True in the database.
+    """
+    user_id = int(get_jwt_identity())
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    user.has_completed_onboarding = True
+    db.session.commit()
+    
+    return jsonify({
+        "message": "Onboarding completed successfully",
+        "has_completed_onboarding": True
+    }), 200
+
+
+# ─────────────────────────────────────────────────────
 # GET USER ALLERGIES
 # GET /api/auth/user/allergies
 # ─────────────────────────────────────────────────────
@@ -164,7 +195,6 @@ def get_allergies():
     Returns all allergy records for the authenticated user.
     Used by Profile.jsx to display current allergies.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
 
     user = User.query.get(user_id)
@@ -189,7 +219,6 @@ def add_allergy():
     Prevents duplicates — will not add the same allergen twice.
     allergen value is lowercased before saving for consistency.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
     data    = request.get_json()
 
@@ -234,7 +263,6 @@ def delete_allergy(allergy_id):
     Removes an allergy from the user's list by its database ID.
     Verifies ownership — users can only delete their own allergies.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
 
     allergy = UserAllergy.query.get(allergy_id)
@@ -262,7 +290,6 @@ def get_diets():
     """
     Returns all dietary preferences for the authenticated user.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
 
     user = User.query.get(user_id)
@@ -290,7 +317,6 @@ def add_diet():
     spicy, traditional, halal, vegetarian, grilled,
     vegan, pescatarian, gluten-free, dairy-free
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id   = int(get_jwt_identity())
     data      = request.get_json()
 
@@ -335,7 +361,6 @@ def delete_diet(diet_id):
     Removes a dietary preference by its database ID.
     Verifies ownership before deletion.
     """
-    from flask_jwt_extended import get_jwt_identity
     user_id = int(get_jwt_identity())
 
     diet = UserDiet.query.get(diet_id)
