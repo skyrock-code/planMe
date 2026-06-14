@@ -33,10 +33,16 @@ def create_app():
 
     # CORS configuration
     CORS(app,
-         resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "*"]}},
-         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "Accept"])
-
+     origins=[
+         "http://localhost:5173",
+         "http://localhost:5174",
+         "https://charming-biscuit-31da66.netlify.app",
+         "https://planme-pro-backend.onrender.com"
+     ],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization", "Accept"],
+     supports_credentials=True)
+    
     @app.after_request
     def add_cors_headers(response):
         response.headers["Access-Control-Allow-Origin"] = "*"
