@@ -86,7 +86,7 @@ def create_app():
     app.register_blueprint(grocery_bp, url_prefix="/api/grocery")
     app.register_blueprint(ingredients_bp, url_prefix="/api/ingredients")
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
-    app.register_blueprint(onboarding_bp, url_prefix="/api/onboarding")
+    app.register_blueprint(onboarding_bp, url_prefix="/api")
 
     # Auto-seed database if empty
     with app.app_context():
