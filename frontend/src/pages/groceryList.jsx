@@ -212,7 +212,7 @@ function AddIngredientModal({ listId, onClose, onAdded }) {
                 onClick={handleAddCustom}
                 className="text-sm font-bold text-primary hover:underline flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-sm">add</span>
+                <span className="material-symbols-outlined text-sm">Add</span>
                 Add "{query}" as custom
               </button>
             </div>
@@ -1093,7 +1093,7 @@ export default function GroceryList() {
             className="flex-1"
             onClick={() => setShowModal(true)}
           >
-            Add
+            Item
           </Button>
 
           {/* Export dropdown */}
